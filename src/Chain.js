@@ -626,7 +626,9 @@ export class Chain {
         if (!hitTextLink) {
             console.log(`  No text hit, checking fallback...`);
             
-            // First, try to find a text link on the same line (check Y is within line bounds)
+            // First, try to find a text line that contains this Y coordinate
+            // Search backwards to find ANY text on a line that contains the Y
+            let matchingLinePosY = null;
             let foundTextLink = false;
             console.log(`  Searching for text link on same line (backwards from end)...`);
             for (let i = this.items.length - 1; i >= 0; i--) {
@@ -641,14 +643,22 @@ export class Chain {
                     const bottomY = item.computed.posY + (item.computed.descent || 0) + (gapSpace / 2);
                     
                     // Check if there's a newline before this text - if so, extend to midpoint with that newline
+                    const originalTopY = topY;
                     for (let j = i - 1; j >= 0; j--) {
                         if (this.items[j] instanceof NewlineLink || this.items[j] instanceof VirtualNewlineLink) {
-                            // Found the newline above this line - extend to midpoint
-                            const midpoint = (this.items[j].computed.posY + topY) / 2;
-                            topY = midpoint;
-                            break;
+                            // Only use newlines on PREVIOUS lines (posY < current line posY)
+                            if (this.items[j].computed.posY < item.computed.posY) {
+                                // Found the newline above this line - extend to midpoint
+                                const midpoint = (this.items[j].computed.posY + originalTopY) / 2;
+                                console.log(`    -> Found newline[${j}] at posY=${this.items[j].computed.posY}, originalTopY=${originalTopY.toFixed(2)}, midpoint=${midpoint.toFixed(2)}`);
+                                topY = midpoint;
+                                break;
+                            } else {
+                                console.log(`    -> Skipping newline[${j}] at posY=${this.items[j].computed.posY} (same line as text at ${item.computed.posY})`);
+                            }
                         } else if (this.items[j] instanceof TextLink) {
                             // Hit another text item, stop searching
+                            console.log(`    -> Hit TextLink[${j}] on same line, not extending topY`);
                             break;
                         }
                     }
@@ -657,10 +667,43 @@ export class Chain {
                     
                     // Check if click Y is within this text's line
                     if (y >= topY && y <= bottomY) {
-                        console.log(`  -> Placing cursor after TextLink[${i}]`);
-                        // Place cursor at end of this text link
-                        this.items.splice(this.cursorIdx(), 1);
-                        this.items.splice(i + 1, 0, new CursorLink());
+                        // Found a line that contains the Y coordinate
+                        matchingLinePosY = item.computed.posY;
+                        console.log(`  -> Y coordinate ${y.toFixed(2)} is within line at posY=${matchingLinePosY}`);
+                        
+                        // Find the first and last text items on this line to determine X bounds
+                        let firstTextIdx = -1;
+                        let lastTextIdx = -1;
+                        let lastTextEndX = 0;
+                        
+                        for (let k = 0; k < this.items.length; k++) {
+                            if (this.items[k] instanceof TextLink && this.items[k].computed.posY === matchingLinePosY) {
+                                if (firstTextIdx === -1) firstTextIdx = k;
+                                lastTextIdx = k;
+                                // Measure the text width using the canvas context
+                                const textItem = this.items[k];
+                                this.ctx.save();
+                                textItem.setFontPropertiesOnContext(this.ctx);
+                                const metrics = this.ctx.measureText(textItem.text);
+                                this.ctx.restore();
+                                lastTextEndX = textItem.computed.posX + metrics.width;
+                            }
+                        }
+                        
+                        console.log(`  -> First text at index ${firstTextIdx}, last text at index ${lastTextIdx}, lastTextEndX=${lastTextEndX.toFixed(2)}, clickX=${x.toFixed(2)}`);
+                        
+                        // If X is beyond the last text, place cursor at END of line
+                        if (x >= lastTextEndX) {
+                            console.log(`  -> Click X is beyond last text, placing cursor at end of line`);
+                            this.items.splice(this.cursorIdx(), 1);
+                            this.items.splice(lastTextIdx + 1, 0, new CursorLink());
+                        } else {
+                            // Otherwise, place cursor at BEGINNING of line
+                            console.log(`  -> Click X is before/within text, placing cursor at start of line`);
+                            this.items.splice(this.cursorIdx(), 1);
+                            this.items.splice(firstTextIdx, 0, new CursorLink());
+                        }
+                        
                         foundTextLink = true;
                         
                         // Debug: log cursor position after recalc

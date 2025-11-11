@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Tests - Canvas Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        #editor-container {
+            border: 2px solid #ccc;
+            margin: 20px 0;
+        }
+        #test-results {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 20px 0;
+            background: #f5f5f5;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .test-result {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid #999;
+        }
+        .test-result.pass {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+        .test-result.fail {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #test-controls {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Canvas Editor Click Tests</h1>
+    
+    <div id="test-controls">
+        <button onclick="runAllTests()">Run All Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="test-results"></div>
+    
+    <div id="editor-container">
+        <canvas id="editor" width="800" height="600"></canvas>
+    </div>
+
+    <script type="module">
+        import { CanvasEditor } from './dist/canvas-editor.esm.js';
+
+        const canvas = document.getElementById('editor');
+        const editor = new CanvasEditor(canvas);
+        
+        // Set up initial content
+        editor.loadHTML(`Welcome to Canvas Editor!
+
+Click anywhere to start typing. Try changing the font and size from the toolbar above.`);
+
+        window.editor = editor;
+        
+        function log(message, pass = null) {
+            const resultsDiv = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = 'test-result' + (pass === true ? ' pass' : pass === false ? ' fail' : '');
+            div.textContent = message;
+            resultsDiv.appendChild(div);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function getCursorPosition() {
+            const chain = editor.chain;
+            const cursorIdx = chain.cursorIdx();
+            const cursor = chain.items[cursorIdx];
+            
+            // Count characters before cursor
+            let charCount = 0;
+            for (let i = 0; i < cursorIdx; i++) {
+                if (chain.items[i].text) {
+                    charCount += chain.items[i].text.length;
+                } else if (chain.items[i].constructor.name === 'NewlineLink') {
+                    charCount += 1; // Count newline as 1 character
+                }
+            }
+            
+            return {
+                index: cursorIdx,
+                charCount: charCount,
+                posY: cursor.computed?.posY,
+                line: Math.round((cursor.computed?.posY || 0) / 24) + 1 // Approximate line number
+            };
+        }
+
+        function simulateClick(x, y, testName) {
+            log(`\n--- ${testName} ---`);
+            log(`  Clicking at (${x}, ${y})`);
+            
+            // Simulate the click
+            editor.chain.clicked(x, y);
+            
+            const pos = getCursorPosition();
+            log(`  Cursor at index ${pos.index}, char ${pos.charCount}, posY=${pos.posY?.toFixed(2)}, line ${pos.line}`);
+            
+            return pos;
+        }
+
+        function assertCursorAt(actualPos, expectedLine, expectedChar, testName) {
+            const lineMatch = actualPos.line === expectedLine;
+            const charMatch = expectedChar === null || actualPos.charCount === expectedChar;
+            const pass = lineMatch && charMatch;
+            
+            if (pass) {
+                log(`  ✓ PASS: Cursor on line ${actualPos.line}, char ${actualPos.charCount}`, true);
+            } else {
+                log(`  ✗ FAIL: Expected line ${expectedLine}, char ${expectedChar || 'any'}, got line ${actualPos.line}, char ${actualPos.charCount}`, false);
+            }
+            
+            return pass;
+        }
+
+        window.runAllTests = function() {
+            clearResults();
+            log('Starting Click Position Tests...\n');
+            
+            let passCount = 0;
+            let failCount = 0;
+            
+            // Test 1: Click after text on line 1
+            let pos = simulateClick(250, 0, 'Test 1: Click after "Editor!" on line 1');
+            if (assertCursorAt(pos, 1, 27, 'Should place cursor at end of line 1')) passCount++; else failCount++;
+            
+            // Test 2: Click before text on line 1
+            pos = simulateClick(5, 0, 'Test 2: Click before "Welcome" on line 1');
+            if (assertCursorAt(pos, 1, 0, 'Should place cursor at start of line 1')) passCount++; else failCount++;
+            
+            // Test 3: Click on empty line 2
+            pos = simulateClick(50, 24, 'Test 3: Click on empty line 2');
+            if (assertCursorAt(pos, 2, 28, 'Should place cursor at start of line 2')) passCount++; else failCount++;
+            
+            // Test 4: Click above line 3 text (in gap between lines)
+            pos = simulateClick(50, 30, 'Test 4: Click in gap above line 3 text');
+            if (assertCursorAt(pos, 3, 28, 'Should place cursor at start of line 3')) passCount++; else failCount++;
+            
+            // Test 5: Click in middle of line 3
+            pos = simulateClick(100, 48, 'Test 5: Click in middle of line 3 text');
+            if (assertCursorAt(pos, 3, null, 'Should place cursor somewhere in line 3')) passCount++; else failCount++;
+            
+            // Test 6: Click after line 3 text
+            pos = simulateClick(600, 48, 'Test 6: Click after line 3 text');
+            if (assertCursorAt(pos, 3, null, 'Should place cursor at/near end of line 3')) passCount++; else failCount++;
+            
+            // Test 7: Click way above line 1 (negative Y)
+            pos = simulateClick(100, -10, 'Test 7: Click above line 1 (negative Y)');
+            if (assertCursorAt(pos, 1, null, 'Should place cursor on line 1')) passCount++; else failCount++;
+            
+            // Test 8: Click directly on "Welcome" (first word)
+            pos = simulateClick(25, 0, 'Test 8: Click on "Welcome" (first word)');
+            if (assertCursorAt(pos, 1, null, 'Should place cursor in "Welcome"')) passCount++; else failCount++;
+            
+            // Test 9: Click on space between words on line 1
+            pos = simulateClick(60, 0, 'Test 9: Click on space between words');
+            if (assertCursorAt(pos, 1, null, 'Should place cursor on line 1')) passCount++; else failCount++;
+            
+            log(`\n========================================`);
+            log(`RESULTS: ${passCount} passed, ${failCount} failed`);
+            log(`========================================`);
+        };
+
+        window.clearResults = function() {
+            document.getElementById('test-results').innerHTML = '';
+        };
+    </script>
+</body>
+</html>

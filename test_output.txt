@@ -1,262 +1,277 @@
 Canvas Editor initialized and ready
-clicked(264.00, -11.60)
+clicked(231.80, -0.80)
   No text hit, checking fallback...
   Searching for text link on same line (backwards from end)...
+    -> Hit TextLink[36] on same line, not extending topY
   TextLink[37]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[35] on same line, not extending topY
   TextLink[36]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[34] on same line, not extending topY
   TextLink[35]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[33] on same line, not extending topY
   TextLink[34]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[32] on same line, not extending topY
   TextLink[33]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[31] on same line, not extending topY
   TextLink[32]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[30] on same line, not extending topY
   TextLink[31]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[29] on same line, not extending topY
   TextLink[30]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[28] on same line, not extending topY
   TextLink[29]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[27] on same line, not extending topY
   TextLink[28]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[26] on same line, not extending topY
   TextLink[27]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[25] on same line, not extending topY
   TextLink[26]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[24] on same line, not extending topY
   TextLink[25]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[23] on same line, not extending topY
   TextLink[24]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[22] on same line, not extending topY
   TextLink[23]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[21] on same line, not extending topY
   TextLink[22]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[20] on same line, not extending topY
   TextLink[21]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[19] on same line, not extending topY
   TextLink[20]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[18] on same line, not extending topY
   TextLink[19]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[17] on same line, not extending topY
   TextLink[18]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[16] on same line, not extending topY
   TextLink[17]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[15] on same line, not extending topY
   TextLink[16]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[14] on same line, not extending topY
   TextLink[15]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[13] on same line, not extending topY
   TextLink[14]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[12] on same line, not extending topY
   TextLink[13]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[11] on same line, not extending topY
   TextLink[12]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[10] on same line, not extending topY
   TextLink[11]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[9] on same line, not extending topY
   TextLink[10]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[9]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Skipping newline[8] at posY=48 (same line as text at 48)
+    -> Found newline[7] at posY=24, originalTopY=30.27, midpoint=27.14
+  TextLink[9]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[27.14, 54.27]
+    -> Hit TextLink[5] on same line, not extending topY
   TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  -> Placing cursor after TextLink[6]
-  Cursor placed at index 7, will have posY=0.00, height=16.00
+  -> Y coordinate -0.80 is within line at posY=0
+  -> First text at index 0, last text at index 6, lastTextEndX=NaN, clickX=231.80
+  -> Click X is before/within text, placing cursor at start of line
+  Cursor placed at index 0, will have posY=0.00, height=16.00
 Single click - cursor repositioned
-clicked(191.00, 21.40)
+clicked(220.80, -6.80)
   No text hit, checking fallback...
   Searching for text link on same line (backwards from end)...
+    -> Hit TextLink[37] on same line, not extending topY
   TextLink[38]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[36] on same line, not extending topY
   TextLink[37]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[35] on same line, not extending topY
   TextLink[36]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[34] on same line, not extending topY
   TextLink[35]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[33] on same line, not extending topY
   TextLink[34]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[32] on same line, not extending topY
   TextLink[33]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[31] on same line, not extending topY
   TextLink[32]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[30] on same line, not extending topY
   TextLink[31]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[29] on same line, not extending topY
   TextLink[30]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[28] on same line, not extending topY
   TextLink[29]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[27] on same line, not extending topY
   TextLink[28]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[26] on same line, not extending topY
   TextLink[27]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[25] on same line, not extending topY
   TextLink[26]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[24] on same line, not extending topY
   TextLink[25]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[23] on same line, not extending topY
   TextLink[24]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[22] on same line, not extending topY
   TextLink[23]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[21] on same line, not extending topY
   TextLink[22]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[20] on same line, not extending topY
   TextLink[21]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[19] on same line, not extending topY
   TextLink[20]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[18] on same line, not extending topY
   TextLink[19]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[17] on same line, not extending topY
   TextLink[18]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[16] on same line, not extending topY
   TextLink[17]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[15] on same line, not extending topY
   TextLink[16]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[14] on same line, not extending topY
   TextLink[15]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[13] on same line, not extending topY
   TextLink[14]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[12] on same line, not extending topY
   TextLink[13]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[11] on same line, not extending topY
   TextLink[12]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[10] on same line, not extending topY
   TextLink[11]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  TextLink[5]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[4]: "Canvas" at posY=0.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[-17.73, 6.27]
-  TextLink[3]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[2]: "to" at posY=0.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[-17.50, 6.50]
-  TextLink[1]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[0]: "Welcome" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  No text on line, checking empty lines...
-  Checking NewlineLink[8] at posY=24.00, lineHeight=24.00, isEmptyLine=true, range=[0.00, 24.00]
-  -> Found empty line at index 8
-  Cursor placed at index 8, will have posY=24.00, height=24.00
+    -> Skipping newline[9] at posY=48 (same line as text at 48)
+    -> Found newline[8] at posY=24, originalTopY=30.27, midpoint=27.14
+  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[27.14, 54.27]
+    -> Hit TextLink[6] on same line, not extending topY
+  TextLink[7]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
+  -> Y coordinate -6.80 is within line at posY=0
+  -> First text at index 1, last text at index 7, lastTextEndX=NaN, clickX=220.80
+  -> Click X is before/within text, placing cursor at start of line
+  Cursor placed at index 1, will have posY=0.00, height=16.00
 Single click - cursor repositioned
-clicked(175.00, 30.40)
+clicked(248.80, -0.80)
   No text hit, checking fallback...
   Searching for text link on same line (backwards from end)...
+    -> Hit TextLink[37] on same line, not extending topY
   TextLink[38]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  -> Placing cursor after TextLink[38]
-  Cursor placed at index 38, will have posY=48.00, height=16.00
-Single click - cursor repositioned
-clicked(167.00, 25.40)
-  No text hit, checking fallback...
-  Searching for text link on same line (backwards from end)...
-  TextLink[37]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[36]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[35]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[34]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[33]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[32]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[31]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[30]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[29]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[28]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[27]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[26]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[25]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[24]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[23]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[22]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[21]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[20]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[19]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[18]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[17]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[16]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[15]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
-  TextLink[14]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[13]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
-  TextLink[12]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[11]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[10]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[9]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  TextLink[5]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[4]: "Canvas" at posY=0.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[-17.73, 6.27]
-  TextLink[3]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[2]: "to" at posY=0.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[-17.50, 6.50]
-  TextLink[1]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[0]: "Welcome" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  No text on line, checking empty lines...
-  Checking NewlineLink[7] at posY=24.00, lineHeight=24.00, isEmptyLine=true, range=[0.00, 24.00]
-  -> No match found, placing cursor at end
-Single click - cursor repositioned
-clicked(157.00, 17.40)
-  No text hit, checking fallback...
-  Searching for text link on same line (backwards from end)...
-  TextLink[37]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[36]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[35]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[34]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[33]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[32]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[31]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[30]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[29]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[28]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[27]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[26]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[25]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[24]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[23]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  TextLink[22]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[21]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[20]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[19]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[18]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[17]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[16]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[15]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
-  TextLink[14]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[13]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
-  TextLink[12]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[11]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
-  TextLink[10]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[9]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  TextLink[5]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[4]: "Canvas" at posY=0.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[-17.73, 6.27]
-  TextLink[3]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[2]: "to" at posY=0.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[-17.50, 6.50]
-  TextLink[1]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[0]: "Welcome" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  No text on line, checking empty lines...
-  Checking NewlineLink[7] at posY=24.00, lineHeight=24.00, isEmptyLine=true, range=[0.00, 24.00]
-  -> Found empty line at index 7
-  Cursor placed at index 8, will have posY=24.00, height=24.00
-Single click - cursor repositioned
-clicked(211.00, -2.60)
-  No text hit, checking fallback...
-  Searching for text link on same line (backwards from end)...
-  TextLink[38]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[36] on same line, not extending topY
   TextLink[37]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[35] on same line, not extending topY
   TextLink[36]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[34] on same line, not extending topY
   TextLink[35]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[33] on same line, not extending topY
   TextLink[34]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[32] on same line, not extending topY
   TextLink[33]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[31] on same line, not extending topY
   TextLink[32]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[30] on same line, not extending topY
   TextLink[31]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[29] on same line, not extending topY
   TextLink[30]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[28] on same line, not extending topY
   TextLink[29]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[27] on same line, not extending topY
   TextLink[28]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[26] on same line, not extending topY
   TextLink[27]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[25] on same line, not extending topY
   TextLink[26]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[24] on same line, not extending topY
   TextLink[25]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[23] on same line, not extending topY
   TextLink[24]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[22] on same line, not extending topY
   TextLink[23]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[21] on same line, not extending topY
   TextLink[22]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[20] on same line, not extending topY
   TextLink[21]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[19] on same line, not extending topY
   TextLink[20]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[18] on same line, not extending topY
   TextLink[19]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[17] on same line, not extending topY
   TextLink[18]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[16] on same line, not extending topY
   TextLink[17]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[15] on same line, not extending topY
   TextLink[16]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[14] on same line, not extending topY
   TextLink[15]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[13] on same line, not extending topY
   TextLink[14]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[12] on same line, not extending topY
   TextLink[13]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[11] on same line, not extending topY
   TextLink[12]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[10] on same line, not extending topY
   TextLink[11]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  -> Placing cursor after TextLink[6]
-  Cursor placed at index 7, will have posY=0.00, height=16.00
+    -> Skipping newline[9] at posY=48 (same line as text at 48)
+    -> Found newline[8] at posY=24, originalTopY=30.27, midpoint=27.14
+  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[27.14, 54.27]
+    -> Hit TextLink[6] on same line, not extending topY
+  TextLink[7]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
+  -> Y coordinate -0.80 is within line at posY=0
+  -> First text at index 0, last text at index 7, lastTextEndX=NaN, clickX=248.80
+  -> Click X is before/within text, placing cursor at start of line
+  Cursor placed at index 0, will have posY=0.00, height=16.00
 Single click - cursor repositioned
-clicked(188.00, 18.40)
+clicked(237.80, -8.80)
   No text hit, checking fallback...
   Searching for text link on same line (backwards from end)...
+    -> Hit TextLink[37] on same line, not extending topY
   TextLink[38]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[36] on same line, not extending topY
   TextLink[37]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[35] on same line, not extending topY
   TextLink[36]: "toolbar" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[34] on same line, not extending topY
   TextLink[35]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[33] on same line, not extending topY
   TextLink[34]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[32] on same line, not extending topY
   TextLink[33]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[31] on same line, not extending topY
   TextLink[32]: "from" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[30] on same line, not extending topY
   TextLink[31]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[29] on same line, not extending topY
   TextLink[30]: "size" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[28] on same line, not extending topY
   TextLink[29]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[27] on same line, not extending topY
   TextLink[28]: "and" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[26] on same line, not extending topY
   TextLink[27]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[25] on same line, not extending topY
   TextLink[26]: "font" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
+    -> Hit TextLink[24] on same line, not extending topY
   TextLink[25]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[23] on same line, not extending topY
   TextLink[24]: "the" at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
+    -> Hit TextLink[22] on same line, not extending topY
   TextLink[23]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[21] on same line, not extending topY
   TextLink[22]: "changing" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[20] on same line, not extending topY
   TextLink[21]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[19] on same line, not extending topY
   TextLink[20]: "Try" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[18] on same line, not extending topY
   TextLink[19]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[17] on same line, not extending topY
   TextLink[18]: "typing." at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[16] on same line, not extending topY
   TextLink[17]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[15] on same line, not extending topY
   TextLink[16]: "start" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[14] on same line, not extending topY
   TextLink[15]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[13] on same line, not extending topY
   TextLink[14]: "to" at posY=48.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[30.50, 54.50]
+    -> Hit TextLink[12] on same line, not extending topY
   TextLink[13]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
+    -> Hit TextLink[11] on same line, not extending topY
   TextLink[12]: "anywhere" at posY=48.00, lineHeight=24.00, textHeight=14.82, gap=9.18, range=[31.96, 55.96]
+    -> Hit TextLink[10] on same line, not extending topY
   TextLink[11]: " " at posY=48.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[36.00, 60.00]
-  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[30.27, 54.27]
-  TextLink[6]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  TextLink[5]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[4]: "Canvas" at posY=0.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[-17.73, 6.27]
-  TextLink[3]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[2]: "to" at posY=0.00, lineHeight=24.00, textHeight=11.38, gap=12.62, range=[-17.50, 6.50]
-  TextLink[1]: " " at posY=0.00, lineHeight=24.00, textHeight=0.00, gap=24.00, range=[-12.00, 12.00]
-  TextLink[0]: "Welcome" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
-  No text on line, checking empty lines...
-  Checking NewlineLink[8] at posY=24.00, lineHeight=24.00, isEmptyLine=true, range=[0.00, 24.00]
-  -> Found empty line at index 8
-  Cursor placed at index 8, will have posY=24.00, height=24.00
-Single click - cursor repositioned
-clicked(622.00, 46.40)
-  No text hit, checking fallback...
-  Searching for text link on same line (backwards from end)...
-  TextLink[38]: "above." at posY=48.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[30.37, 54.37]
-  -> Placing cursor after TextLink[38]
-  Cursor placed at index 38, will have posY=48.00, height=16.00
+    -> Skipping newline[9] at posY=48 (same line as text at 48)
+    -> Found newline[8] at posY=24, originalTopY=30.27, midpoint=27.14
+  TextLink[10]: "Click" at posY=48.00, lineHeight=24.00, textHeight=11.84, gap=12.16, range=[27.14, 54.27]
+    -> Hit TextLink[6] on same line, not extending topY
+  TextLink[7]: "Editor!" at posY=0.00, lineHeight=24.00, textHeight=11.64, gap=12.36, range=[-17.63, 6.37]
+  -> Y coordinate -8.80 is within line at posY=0
+  -> First text at index 1, last text at index 7, lastTextEndX=NaN, clickX=237.80
+  -> Click X is before/within text, placing cursor at start of line
+  Cursor placed at index 1, will have posY=0.00, height=16.00
 Single click - cursor repositioned
