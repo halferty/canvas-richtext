@@ -11,6 +11,8 @@ export class Chain {
         this.ctx = ctx;
         this.widthPixels = widthPixels;
         this.currentFontProperties = defaultFontProperties;
+        this.selectionStart = null;
+        this.selectionEnd = null;
     }
 
     printItems() {
@@ -36,7 +38,6 @@ export class Chain {
                 colors.push('color: #ff0000');
             }
         });
-        console.log(s, ...colors);
     }
 
     getItems() {
@@ -49,7 +50,32 @@ export class Chain {
                 return i;
             }
         }
-        throw new Error("CursorLink not found!");
+        // Cursor not found - dump state for debugging
+        console.error("CursorLink not found! Chain state:");
+        console.error("Total items:", this.items.length);
+        console.error("Chain dump:", this.dumpChainState());
+        this.printItems();
+        throw new Error("CursorLink not found! Check console for chain state dump.");
+    }
+
+    // Dump chain state as JSON for debugging
+    dumpChainState() {
+        return this.items.map((item, idx) => {
+            let type = 'Unknown';
+            if (item instanceof TextLink) type = 'TextLink';
+            else if (item instanceof CursorLink) type = 'CursorLink';
+            else if (item instanceof NewlineLink) type = 'NewlineLink';
+            else if (item instanceof VirtualNewlineLink) type = 'VirtualNewlineLink';
+            
+            return {
+                index: idx,
+                type: type,
+                text: item instanceof TextLink ? item.text : undefined,
+                posX: item.computed?.posX,
+                posY: item.computed?.posY,
+                fontSize: item instanceof TextLink ? item.intrinsic.fontProperties?.size : undefined
+            };
+        });
     }
 
     getCursor() {
@@ -236,7 +262,17 @@ export class Chain {
         let currentLineMaxDescent = 0;
         
         for (let i = 0; i < this.items.length + 1; i++) {
-            let lineHeight = Math.max(currentLineMaxAscent + currentLineMaxDescent, currentLineMaxFontSize) * ((currentLineNum !== 0) ? this.LINE_SPACING_MULT : 1);
+            // Calculate base line height
+            let baseHeight = Math.max(currentLineMaxAscent + currentLineMaxDescent, currentLineMaxFontSize);
+            
+            // Ensure empty lines have a minimum height (use current font size)
+            if (baseHeight === 0) {
+                baseHeight = this.currentFontProperties.size;
+            }
+            
+            // Apply consistent line spacing to all lines
+            let lineHeight = baseHeight * this.LINE_SPACING_MULT;
+            
             for (let j = currentLineStartIdx; j < i; j++) {
                 this.items[j].computed.lineHeight = lineHeight;
             }
@@ -305,10 +341,29 @@ export class Chain {
         this.removeVirtualNewlines();
         this.joinAdjacentTextLinks();
         this.removeEmptyTextLinks();
+        
+        // Safety check: ensure cursor still exists
+        this.ensureCursorExists();
+        
         this.chunkTextLinks();
         this.recalcXPositions();
         this.recalcYPositions();
         this.printItems();
+    }
+
+    // Safety check to ensure a cursor always exists
+    ensureCursorExists() {
+        let hasCursor = false;
+        for (let i = 0; i < this.items.length; i++) {
+            if (this.items[i] instanceof CursorLink) {
+                hasCursor = true;
+                break;
+            }
+        }
+        if (!hasCursor) {
+            console.warn("Cursor was missing! Adding cursor to end of chain.");
+            this.items.push(new CursorLink());
+        }
     }
 
     printableKeyPressed(char) {
@@ -359,11 +414,12 @@ export class Chain {
                         this.items.splice(this.cursorIdx(), 1);
                         this.items.splice(i, 0, new CursorLink());
                     } else {
-                        this.items.splice(this.cursorIdx(), 1);
+                        const cursorIdx = this.cursorIdx();
+                        this.items.splice(cursorIdx, 1);
                         const text = this.items[i].text;
                         this.items[i].text = text.substring(0, text.length - 1);
-                        this.items.splice(i + 1, 0, new TextLink(text.substring(text.length - 1), this.items[i].intrinsic.fontProperties.clone()));
                         this.items.splice(i + 1, 0, new CursorLink());
+                        this.items.splice(i + 2, 0, new TextLink(text.substring(text.length - 1), this.items[i].intrinsic.fontProperties.clone()));
                     }
                     break;
                 } else if (this.items[i] instanceof NewlineLink) {
@@ -382,20 +438,30 @@ export class Chain {
         if (this.cursorIdx() < this.items.length - 1) {
             for (let i = this.cursorIdx() + 1; i < this.items.length; i++) {
                 if (this.items[i] instanceof TextLink) {
-                    if (this.items[i].text.length === 1) {
-                        this.items.splice(this.cursorIdx(), 1);
-                        this.items.splice(i + 1, 0, new CursorLink());
+                    const cursorIdx = this.cursorIdx();
+                    const textLink = this.items[i];
+                    this.items.splice(cursorIdx, 1);
+                    // Adjust index if cursor was before this text link
+                    const adjustedIdx = (cursorIdx < i) ? i - 1 : i;
+                    
+                    if (textLink.text.length === 1) {
+                        // Single character - just move cursor after it
+                        this.items.splice(adjustedIdx + 1, 0, new CursorLink());
                     } else {
-                        this.items.splice(this.cursorIdx(), 1);
-                        const text = this.items[i - 1].text;
-                        this.items[i - 1].text = text.substring(1);
-                        this.items.splice(i - 1, 0, new TextLink(text.substring(0, 1), this.items[i - 1].intrinsic.fontProperties.clone()));
-                        this.items.splice(i, 0, new CursorLink());
+                        // Multi-character - split off first character
+                        const text = textLink.text;
+                        const fontProps = textLink.intrinsic.fontProperties.clone();
+                        this.items[adjustedIdx].text = text.substring(1);
+                        this.items.splice(adjustedIdx, 0, new TextLink(text.substring(0, 1), fontProps));
+                        this.items.splice(adjustedIdx + 1, 0, new CursorLink());
                     }
                     break;
                 } else if (this.items[i] instanceof NewlineLink) {
-                    this.items.splice(this.cursorIdx(), 1);
-                    this.items.splice(i + 1, 0, new CursorLink());
+                    const cursorIdx = this.cursorIdx();
+                    this.items.splice(cursorIdx, 1);
+                    // Adjust index if cursor was before the newline
+                    const adjustedIdx = (cursorIdx < i) ? i - 1 : i;
+                    this.items.splice(adjustedIdx + 1, 0, new CursorLink());
                     break;
                 } else if (this.items[i] instanceof CursorLink) {
                     throw new Error("CursorLink found while searching after cursorIdx!");
@@ -415,16 +481,20 @@ export class Chain {
         for (let i = 0; i < this.items.length; i++) {
             const item = this.items[i];
             if (item instanceof TextLink && item.clickHits(this.ctx, x, y)) {
-                let charIdx = item.getCharIdxFromX(this.ctx, x);
-                if (charIdx !== null) {
-                    const cursorIdx = this.cursorIdx();
-                    this.items.splice(cursorIdx, 1);
-                    const text = item.text;
-                    item.text = text.substring(0, charIdx);
-                    this.items.splice(i + 1, 0, new TextLink(text.substring(charIdx, text.length), item.intrinsic.fontProperties.clone()));
-                    this.items.splice(i + 1, 0, new CursorLink());
-                    hitTextLink = true;
-                }
+                const charIdx = item.getCharIdxFromX(this.ctx, x);
+                const cursorIdx = this.cursorIdx();
+                const text = item.text;
+                const fontProps = item.intrinsic.fontProperties.clone();
+                
+                this.items.splice(cursorIdx, 1);
+                // Adjust index if cursor was before this text link
+                const adjustedIdx = (cursorIdx < i) ? i - 1 : i;
+                
+                this.items[adjustedIdx].text = text.substring(0, charIdx);
+                this.items.splice(adjustedIdx + 1, 0, new CursorLink());
+                this.items.splice(adjustedIdx + 2, 0, new TextLink(text.substring(charIdx, text.length), fontProps));
+                hitTextLink = true;
+                break;
             }
         }
         if (!hitTextLink) {
@@ -460,4 +530,86 @@ export class Chain {
         this.widthPixels = widthPixels;
         this.recalc();
     }
+
+    // Get character position in the flattened text (for selection)
+    getCharPosition(itemIdx, charOffset) {
+        let pos = 0;
+        for (let i = 0; i < itemIdx && i < this.items.length; i++) {
+            if (this.items[i] instanceof TextLink) {
+                pos += this.items[i].text.length;
+            } else if (this.items[i] instanceof NewlineLink) {
+                pos += 1;
+            }
+        }
+        if (itemIdx < this.items.length && this.items[itemIdx] instanceof TextLink) {
+            pos += Math.min(charOffset, this.items[itemIdx].text.length);
+        }
+        return pos;
+    }
+
+    // Convert character position to item index and offset
+    getItemFromCharPosition(charPos) {
+        let pos = 0;
+        for (let i = 0; i < this.items.length; i++) {
+            if (this.items[i] instanceof TextLink) {
+                if (pos + this.items[i].text.length >= charPos) {
+                    return { itemIdx: i, charOffset: charPos - pos };
+                }
+                pos += this.items[i].text.length;
+            } else if (this.items[i] instanceof NewlineLink) {
+                if (pos >= charPos) {
+                    return { itemIdx: i, charOffset: 0 };
+                }
+                pos += 1;
+            }
+        }
+        return { itemIdx: this.items.length - 1, charOffset: 0 };
+    }
+
+    setSelection(startItemIdx, startCharOffset, endItemIdx, endCharOffset) {
+        this.selectionStart = this.getCharPosition(startItemIdx, startCharOffset);
+        this.selectionEnd = this.getCharPosition(endItemIdx, endCharOffset);
+        
+        // Ensure start < end
+        if (this.selectionStart > this.selectionEnd) {
+            [this.selectionStart, this.selectionEnd] = [this.selectionEnd, this.selectionStart];
+        }
+    }
+
+    clearSelection() {
+        this.selectionStart = null;
+        this.selectionEnd = null;
+    }
+
+    hasSelection() {
+        return this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd;
+    }
+
+    // Get selected text
+    getSelectedText() {
+        if (!this.hasSelection()) return '';
+        
+        let text = '';
+        let pos = 0;
+        for (let item of this.items) {
+            if (item instanceof TextLink) {
+                const itemStart = pos;
+                const itemEnd = pos + item.text.length;
+                
+                if (itemEnd > this.selectionStart && itemStart < this.selectionEnd) {
+                    const start = Math.max(0, this.selectionStart - itemStart);
+                    const end = Math.min(item.text.length, this.selectionEnd - itemStart);
+                    text += item.text.substring(start, end);
+                }
+                pos += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                if (pos >= this.selectionStart && pos < this.selectionEnd) {
+                    text += '\n';
+                }
+                pos += 1;
+            }
+        }
+        return text;
+    }
 }
+

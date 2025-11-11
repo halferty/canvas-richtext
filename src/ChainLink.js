@@ -59,7 +59,10 @@ export class TextLink extends ChainLink {
 
     clickHits(ctx, x, y) {
         if (x >= this.computed.posX && x <= this.computed.posX + this.measureText(ctx).width) {
-            if (y >= this.computed.posY && y <= this.computed.posY + this.computed.lineHeight) {
+            // Text baseline is at posY, text extends up by ascent and down by descent
+            const topY = this.computed.posY - (this.computed.ascent || 0);
+            const bottomY = this.computed.posY + (this.computed.descent || 0);
+            if (y >= topY && y <= bottomY) {
                 return true;
             }
         }
@@ -77,7 +80,8 @@ export class TextLink extends ChainLink {
             charIdx++;
             charPosX += charWidth;
         }
-        return null;
+        // If we get here, the click was after the last character
+        return this.text.length;
     }
 }
 
