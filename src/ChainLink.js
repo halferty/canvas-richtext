@@ -60,8 +60,14 @@ export class TextLink extends ChainLink {
     clickHits(ctx, x, y) {
         if (x >= this.computed.posX && x <= this.computed.posX + this.measureText(ctx).width) {
             // Text baseline is at posY, text extends up by ascent and down by descent
-            const topY = this.computed.posY - (this.computed.ascent || 0);
-            const bottomY = this.computed.posY + (this.computed.descent || 0);
+            // Each line owns half the gap space above and below
+            const lineHeight = this.computed.lineHeight || 0;
+            const textHeight = (this.computed.ascent || 0) + (this.computed.descent || 0);
+            const gapSpace = lineHeight - textHeight;
+            
+            const topY = this.computed.posY - (this.computed.ascent || 0) - (gapSpace / 2);
+            const bottomY = this.computed.posY + (this.computed.descent || 0) + (gapSpace / 2);
+            
             if (y >= topY && y <= bottomY) {
                 return true;
             }

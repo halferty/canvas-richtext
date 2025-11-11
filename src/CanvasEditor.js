@@ -41,6 +41,7 @@ export class CanvasEditor {
         // Cursor blink state
         this.cursorVisible = true;
         this.lastBlinkTime = Date.now();
+        this.blinkCycleStartTime = Date.now();
         this.animationFrameId = null;
 
         // Selection state
@@ -51,6 +52,10 @@ export class CanvasEditor {
         this.lastClickTime = 0;
         this.clickCount = 0;
         this.clickResetTimeout = null;
+
+        // Debug crosshairs
+        this.debugCrosshairs = [];
+        this.debugCrosshairsDuration = 2000; // 2 seconds
 
         // Event listeners
         this.setupEventListeners();
@@ -83,7 +88,7 @@ export class CanvasEditor {
         const key = e.key;
 
         // Prevent default for most editor keys
-        if (key === 'Backspace' || key === 'Enter' || key === 'ArrowLeft' || key === 'ArrowRight') {
+        if (key === 'Backspace' || key === 'Enter' || key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') {
             e.preventDefault();
         }
 
@@ -101,12 +106,20 @@ export class CanvasEditor {
             this.chain.enterPressed();
             this.render();
         } else if (key === 'ArrowLeft') {
-            this.chain.clearSelection();
+            // leftArrowPressed handles selection internally
             this.chain.leftArrowPressed();
             this.render();
         } else if (key === 'ArrowRight') {
-            this.chain.clearSelection();
+            // rightArrowPressed handles selection internally
             this.chain.rightArrowPressed();
+            this.render();
+        } else if (key === 'ArrowUp') {
+            this.chain.clearSelection();
+            this.chain.upArrowPressed();
+            this.render();
+        } else if (key === 'ArrowDown') {
+            this.chain.clearSelection();
+            this.chain.downArrowPressed();
             this.render();
         } else if (key.length === 1 && !e.ctrlKey && !e.metaKey) {
             // Printable character - delete selection first if exists
@@ -117,9 +130,8 @@ export class CanvasEditor {
             this.render();
         }
 
-        // Reset cursor blink
-        this.cursorVisible = true;
-        this.lastBlinkTime = Date.now();
+        // Reset cursor blink to stay visible for full cycle
+        this.resetCursorBlink();
     }
 
     deleteSelection() {
@@ -181,6 +193,13 @@ export class CanvasEditor {
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding;
         
+        // Add debug crosshairs
+        this.debugCrosshairs.push({
+            x: x,
+            y: y,
+            timestamp: Date.now()
+        });
+        
         // Track click count for double/triple click
         const now = Date.now();
         if (now - this.lastClickTime < 500) {
@@ -199,6 +218,8 @@ export class CanvasEditor {
         }, 500);
         
         this.isMouseDown = true;
+        this.mouseDownX = x;
+        this.mouseDownY = y;
         
         // Store the character position where mouse went down
         const startPos = this.getCharacterAtPosition(x, y);
@@ -222,9 +243,8 @@ export class CanvasEditor {
         
         this.render();
 
-        // Reset cursor blink
-        this.cursorVisible = true;
-        this.lastBlinkTime = Date.now();
+        // Reset cursor blink to stay visible for full cycle
+        this.resetCursorBlink();
 
         // Focus the canvas
         this.canvas.focus();
@@ -236,6 +256,10 @@ export class CanvasEditor {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding;
+
+        // Require minimum drag distance to start selection (prevent accidental selection on click)
+        const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
+        if (dragDistance < 3) return; // 3 pixel threshold
 
         // Find character position for current mouse position
         const endPos = this.getCharacterAtPosition(x, y);
@@ -422,14 +446,40 @@ export class CanvasEditor {
     startAnimationLoop() {
         const animate = () => {
             const now = Date.now();
-            if (now - this.lastBlinkTime > this.options.cursorBlinkRate) {
+            const timeSinceCycleStart = now - this.blinkCycleStartTime;
+            let needsRender = false;
+            
+            // During first full cycle (2 blink periods), keep cursor visible
+            if (timeSinceCycleStart < this.options.cursorBlinkRate * 2) {
+                if (!this.cursorVisible) {
+                    this.cursorVisible = true;
+                    needsRender = true;
+                }
+            } else if (now - this.lastBlinkTime > this.options.cursorBlinkRate) {
+                // Normal blinking after first full cycle
                 this.cursorVisible = !this.cursorVisible;
                 this.lastBlinkTime = now;
+                needsRender = true;
+            }
+            
+            // Check if we have active debug crosshairs
+            if (this.debugCrosshairs.length > 0) {
+                needsRender = true;
+            }
+            
+            if (needsRender) {
                 this.render();
             }
+            
             this.animationFrameId = requestAnimationFrame(animate);
         };
         this.animationFrameId = requestAnimationFrame(animate);
+    }
+
+    resetCursorBlink() {
+        this.cursorVisible = true;
+        this.lastBlinkTime = Date.now();
+        this.blinkCycleStartTime = Date.now();
     }
 
     render() {
@@ -458,7 +508,51 @@ export class CanvasEditor {
             }
         }
 
+        // Render debug crosshairs
+        this.renderDebugCrosshairs();
+
         this.ctx.restore();
+    }
+
+    renderDebugCrosshairs() {
+        const now = Date.now();
+        
+        // Remove expired crosshairs
+        this.debugCrosshairs = this.debugCrosshairs.filter(
+            ch => now - ch.timestamp < this.debugCrosshairsDuration
+        );
+        
+        // Render remaining crosshairs with fade
+        for (let ch of this.debugCrosshairs) {
+            const age = now - ch.timestamp;
+            const opacity = 1 - (age / this.debugCrosshairsDuration);
+            
+            this.ctx.save();
+            this.ctx.strokeStyle = `rgba(255, 0, 0, ${opacity})`;
+            this.ctx.lineWidth = 1;
+            
+            // Draw crosshairs
+            const size = 20;
+            
+            // Horizontal line
+            this.ctx.beginPath();
+            this.ctx.moveTo(ch.x - size, ch.y);
+            this.ctx.lineTo(ch.x + size, ch.y);
+            this.ctx.stroke();
+            
+            // Vertical line
+            this.ctx.beginPath();
+            this.ctx.moveTo(ch.x, ch.y - size);
+            this.ctx.lineTo(ch.x, ch.y + size);
+            this.ctx.stroke();
+            
+            // Small circle at center
+            this.ctx.beginPath();
+            this.ctx.arc(ch.x, ch.y, 3, 0, Math.PI * 2);
+            this.ctx.stroke();
+            
+            this.ctx.restore();
+        }
     }
 
     renderSelection() {

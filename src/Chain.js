@@ -406,7 +406,50 @@ export class Chain {
         this.recalc();
     }
 
+    // Move cursor to a specific character position
+    moveCursorToCharPosition(charPos) {
+        const { itemIdx, charOffset } = this.getItemFromCharPosition(charPos);
+        const cursorIdx = this.cursorIdx();
+        
+        // Remove current cursor
+        this.items.splice(cursorIdx, 1);
+        
+        // Adjust index if cursor was before target position
+        const adjustedIdx = (cursorIdx < itemIdx) ? itemIdx - 1 : itemIdx;
+        
+        if (adjustedIdx >= this.items.length) {
+            // Position at end
+            this.items.push(new CursorLink());
+        } else if (this.items[adjustedIdx] instanceof TextLink && charOffset > 0) {
+            // Split text link at the character offset
+            const textLink = this.items[adjustedIdx];
+            const text = textLink.text;
+            const fontProps = textLink.intrinsic.fontProperties.clone();
+            
+            textLink.text = text.substring(0, charOffset);
+            this.items.splice(adjustedIdx + 1, 0, new CursorLink());
+            if (charOffset < text.length) {
+                this.items.splice(adjustedIdx + 2, 0, new TextLink(text.substring(charOffset), fontProps));
+            }
+        } else {
+            // Position before the item
+            this.items.splice(adjustedIdx, 0, new CursorLink());
+        }
+        
+        this.recalc();
+    }
+
     leftArrowPressed() {
+        // Clear target X when moving horizontally
+        this.targetCursorX = undefined;
+        
+        // If there's a selection, move to the start of it
+        if (this.hasSelection()) {
+            this.moveCursorToCharPosition(this.selectionStart);
+            this.clearSelection();
+            return;
+        }
+        
         if (this.cursorIdx() > 0) {
             for (let i = this.cursorIdx() - 1; i >= 0; i--) {
                 if (this.items[i] instanceof TextLink) {
@@ -435,6 +478,16 @@ export class Chain {
     }
 
     rightArrowPressed() {
+        // Clear target X when moving horizontally
+        this.targetCursorX = undefined;
+        
+        // If there's a selection, move to the end of it
+        if (this.hasSelection()) {
+            this.moveCursorToCharPosition(this.selectionEnd);
+            this.clearSelection();
+            return;
+        }
+        
         if (this.cursorIdx() < this.items.length - 1) {
             for (let i = this.cursorIdx() + 1; i < this.items.length; i++) {
                 if (this.items[i] instanceof TextLink) {
@@ -471,16 +524,89 @@ export class Chain {
         this.recalc();
     }
 
+    upArrowPressed() {
+        const cursorIdx = this.cursorIdx();
+        const cursor = this.items[cursorIdx];
+        
+        // Get current cursor X position (or use stored targetX if available)
+        const currentX = this.targetCursorX !== undefined ? this.targetCursorX : cursor.computed.posX;
+        const currentY = cursor.computed.posY;
+        
+        // Store the X position for future up/down movements
+        this.targetCursorX = currentX;
+        
+        // Find the previous line by looking for items with lower Y positions
+        let targetY = null;
+        for (let i = cursorIdx - 1; i >= 0; i--) {
+            const item = this.items[i];
+            if (item.computed && item.computed.posY !== undefined && item.computed.posY < currentY) {
+                targetY = item.computed.posY;
+                break;
+            }
+        }
+        
+        if (targetY === null) {
+            // Already on first line, move to beginning
+            this.items.splice(cursorIdx, 1);
+            this.items.unshift(new CursorLink());
+            this.recalc();
+            return;
+        }
+        
+        // Find the best position on the target line (closest X to currentX)
+        this.clicked(currentX, targetY);
+    }
+
+    downArrowPressed() {
+        const cursorIdx = this.cursorIdx();
+        const cursor = this.items[cursorIdx];
+        
+        // Get current cursor X position (or use stored targetX if available)
+        const currentX = this.targetCursorX !== undefined ? this.targetCursorX : cursor.computed.posX;
+        const currentY = cursor.computed.posY;
+        
+        // Store the X position for future up/down movements
+        this.targetCursorX = currentX;
+        
+        // Find the next line by looking for items with higher Y positions
+        let targetY = null;
+        for (let i = cursorIdx + 1; i < this.items.length; i++) {
+            const item = this.items[i];
+            if (item.computed && item.computed.posY !== undefined && item.computed.posY > currentY) {
+                targetY = item.computed.posY;
+                break;
+            }
+        }
+        
+        if (targetY === null) {
+            // Already on last line, move to end
+            this.items.splice(cursorIdx, 1);
+            this.items.push(new CursorLink());
+            this.recalc();
+            return;
+        }
+        
+        // Find the best position on the target line (closest X to currentX)
+        this.clicked(currentX, targetY);
+    }
+
     enterPressed() {
         this.items.splice(this.cursorIdx(), 0, new NewlineLink());
         this.recalc();
     }
 
     clicked(x, y) {
+        // Clear target X when clicking
+        this.targetCursorX = undefined;
+        
+        console.log(`clicked(${x.toFixed(2)}, ${y.toFixed(2)})`);
+        
         let hitTextLink = false;
         for (let i = 0; i < this.items.length; i++) {
             const item = this.items[i];
             if (item instanceof TextLink && item.clickHits(this.ctx, x, y)) {
+                console.log(`  Hit TextLink[${i}]: "${item.text}" at posY=${item.computed.posY.toFixed(2)}, ascent=${item.computed.ascent.toFixed(2)}, descent=${item.computed.descent.toFixed(2)}`);
+
                 const charIdx = item.getCharIdxFromX(this.ctx, x);
                 const cursorIdx = this.cursorIdx();
                 const text = item.text;
@@ -498,21 +624,113 @@ export class Chain {
             }
         }
         if (!hitTextLink) {
+            console.log(`  No text hit, checking fallback...`);
+            
+            // First, try to find a text link on the same line (check Y is within line bounds)
             let foundTextLink = false;
+            console.log(`  Searching for text link on same line (backwards from end)...`);
             for (let i = this.items.length - 1; i >= 0; i--) {
                 if (this.items[i] instanceof TextLink) {
-                    const lineHeight = this.items[i].computed.lineHeight;
-                    if (y >= this.items[i].computed.posY - lineHeight && y <= this.items[i].computed.posY + lineHeight) {
+                    const item = this.items[i];
+                    const lineHeight = item.computed.lineHeight || this.currentFontProperties.size * this.LINE_SPACING_MULT;
+                    const textHeight = (item.computed.ascent || 0) + (item.computed.descent || 0);
+                    const gapSpace = lineHeight - textHeight;
+                    
+                    // Default: Each line owns half the gap above and half the gap below
+                    let topY = item.computed.posY - (item.computed.ascent || 0) - (gapSpace / 2);
+                    const bottomY = item.computed.posY + (item.computed.descent || 0) + (gapSpace / 2);
+                    
+                    // Check if there's a newline before this text - if so, extend to midpoint with that newline
+                    for (let j = i - 1; j >= 0; j--) {
+                        if (this.items[j] instanceof NewlineLink || this.items[j] instanceof VirtualNewlineLink) {
+                            // Found the newline above this line - extend to midpoint
+                            const midpoint = (this.items[j].computed.posY + topY) / 2;
+                            topY = midpoint;
+                            break;
+                        } else if (this.items[j] instanceof TextLink) {
+                            // Hit another text item, stop searching
+                            break;
+                        }
+                    }
+                    
+                    console.log(`  TextLink[${i}]: "${item.text}" at posY=${item.computed.posY.toFixed(2)}, lineHeight=${lineHeight.toFixed(2)}, textHeight=${textHeight.toFixed(2)}, gap=${gapSpace.toFixed(2)}, range=[${topY.toFixed(2)}, ${bottomY.toFixed(2)}]`);
+                    
+                    // Check if click Y is within this text's line
+                    if (y >= topY && y <= bottomY) {
+                        console.log(`  -> Placing cursor after TextLink[${i}]`);
+                        // Place cursor at end of this text link
                         this.items.splice(this.cursorIdx(), 1);
                         this.items.splice(i + 1, 0, new CursorLink());
                         foundTextLink = true;
-                        break;
+                        
+                        // Debug: log cursor position after recalc
+                        this.recalc();
+                        const newCursor = this.items[this.cursorIdx()];
+                        console.log(`  Cursor placed at index ${this.cursorIdx()}, will have posY=${newCursor.computed?.posY?.toFixed(2) || 'pending'}, height=${newCursor.computed?.height?.toFixed(2) || 'pending'}`);
+                        return; // Skip the recalc at the end
                     }
                 }
             }
+            
+            // If no text link found, check if we clicked on an empty line
+            let foundEmptyLine = false;
             if (!foundTextLink) {
+                console.log(`  No text on line, checking empty lines...`);
+            for (let i = 0; i < this.items.length; i++) {
+                const item = this.items[i];
+                if ((item instanceof NewlineLink || item instanceof VirtualNewlineLink) && 
+                    item.computed && item.computed.posY !== undefined) {
+                    // Check if this is the start of an empty line (next item is also newline or VirtualNewlineLink or end)
+                    const nextItem = this.items[i + 1];
+                    const isEmptyLine = !nextItem || nextItem instanceof NewlineLink || 
+                                       nextItem instanceof VirtualNewlineLink || nextItem instanceof CursorLink;
+                    
+                    if (isEmptyLine) {
+                        // Empty line spans from end of previous line to halfway to next line
+                        const lineHeight = item.computed.lineHeight || this.currentFontProperties.size * this.LINE_SPACING_MULT;
+                        let topY = item.computed.posY - lineHeight;
+                        let bottomY = item.computed.posY;
+                        
+                        // Find the next line to determine where our bottom boundary should be
+                        for (let j = i + 1; j < this.items.length; j++) {
+                            if (this.items[j] instanceof TextLink) {
+                                // Next line has text - extend to midpoint
+                                const nextLineTop = this.items[j].computed.posY - (this.items[j].computed.ascent || 0) - 
+                                    ((this.items[j].computed.lineHeight - (this.items[j].computed.ascent + this.items[j].computed.descent)) / 2);
+                                bottomY = (item.computed.posY + nextLineTop) / 2;
+                                break;
+                            }
+                        }
+                        
+                        const itemType = item instanceof NewlineLink ? 'NewlineLink' : 'VirtualNewlineLink';
+                        console.log(`  Checking ${itemType}[${i}] at posY=${item.computed.posY.toFixed(2)}, lineHeight=${lineHeight.toFixed(2)}, isEmptyLine=${isEmptyLine}, range=[${topY.toFixed(2)}, ${bottomY.toFixed(2)}]`);
+                        
+                        if (y >= topY && y <= bottomY) {
+                            console.log(`  -> Found empty line at index ${i}`);
+                            // Place cursor right after this newline (at the start of the empty line)
+                            const cursorIdx = this.cursorIdx();
+                            this.items.splice(cursorIdx, 1);
+                            // Adjust index if cursor was before target position
+                            const adjustedIdx = (cursorIdx <= i) ? i : i + 1;
+                            this.items.splice(adjustedIdx, 0, new CursorLink());
+                            foundEmptyLine = true;
+                            
+                            // Debug: log cursor position after recalc
+                            this.recalc();
+                            const newCursor = this.items[this.cursorIdx()];
+                            console.log(`  Cursor placed at index ${this.cursorIdx()}, will have posY=${newCursor.computed?.posY?.toFixed(2) || 'pending'}, height=${newCursor.computed?.height?.toFixed(2) || 'pending'}`);
+                            return; // Skip the recalc at the end
+                        }
+                    }
+                }
+            }
+            
+            if (!foundEmptyLine && !foundTextLink) {
+                console.log(`  -> No match found, placing cursor at end`);
+                // Default: move to end
                 this.items.splice(this.cursorIdx(), 1);
                 this.items.push(new CursorLink());
+            }
             }
         }
         this.recalc();
