@@ -1,0 +1,38 @@
+{
+  "name": "canvas-richtext",
+  "version": "0.1.0",
+  "description": "A canvas-based rich-text editor for the web, similar to Google Docs",
+  "main": "dist/canvas-editor.js",
+  "module": "dist/canvas-editor.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "canvas",
+    "editor",
+    "rich-text",
+    "wysiwyg",
+    "text-editor"
+  ],
+  "author": "Ed Halferty <ed@halferty.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/halferty/canvas-richtext.git"
+  },
+  "homepage": "https://github.com/halferty/canvas-richtext#readme",
+  "bugs": {
+    "url": "https://github.com/halferty/canvas-richtext/issues"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "rollup": "^4.9.0"
+  }
+}

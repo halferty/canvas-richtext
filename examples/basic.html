@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Editor Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar button,
+        .toolbar select {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .toolbar button:hover,
+        .toolbar select:hover {
+            background: #f0f0f0;
+        }
+
+        .toolbar button:active {
+            background: #e0e0e0;
+        }
+
+        #editor {
+            border: 2px solid #ddd;
+            cursor: text;
+            border-radius: 4px;
+            display: block;
+        }
+
+        #editor:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #2e7d32;
+        }
+
+        .info code {
+            background: #c8e6c9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Canvas Editor Demo</h1>
+        
+        <div class="toolbar">
+            <select id="fontFamily">
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Verdana">Verdana</option>
+            </select>
+
+            <select id="fontSize">
+                <option value="12">12px</option>
+                <option value="14">14px</option>
+                <option value="16" selected>16px</option>
+                <option value="18">18px</option>
+                <option value="20">20px</option>
+                <option value="24">24px</option>
+                <option value="32">32px</option>
+                <option value="48">48px</option>
+            </select>
+
+            <button id="clearBtn">Clear</button>
+            <button id="getTextBtn">Get Text</button>
+            <button id="setTextBtn">Set Sample Text</button>
+        </div>
+
+        <canvas id="editor" width="860" height="400"></canvas>
+
+        <div class="info">
+            <strong>Instructions:</strong> Click the canvas to start typing. Use keyboard to type, 
+            <code>Enter</code> for new lines, <code>Backspace</code> to delete, 
+            <code>←</code> <code>→</code> to move cursor. Change font properties and type to see them applied!
+        </div>
+    </div>
+
+    <script type="module">
+        import { CanvasEditor } from '../dist/canvas-editor.esm.js';
+
+        const canvas = document.getElementById('editor');
+        const fontFamilySelect = document.getElementById('fontFamily');
+        const fontSizeSelect = document.getElementById('fontSize');
+        const clearBtn = document.getElementById('clearBtn');
+        const getTextBtn = document.getElementById('getTextBtn');
+        const setTextBtn = document.getElementById('setTextBtn');
+
+        // Create the editor
+        const editor = new CanvasEditor(canvas, {
+            backgroundColor: '#ffffff',
+            cursorColor: '#333333',
+            cursorWidth: 2,
+            defaultFontSize: 16,
+            defaultFontFamily: 'Arial',
+            padding: 15
+        });
+
+        // Set initial text
+        editor.setText('Welcome to Canvas Editor!\n\nClick anywhere to start typing. Try changing the font and size from the toolbar above.');
+
+        // Toolbar event listeners
+        fontFamilySelect.addEventListener('change', (e) => {
+            editor.setFontFamily(e.target.value);
+            canvas.focus();
+        });
+
+        fontSizeSelect.addEventListener('change', (e) => {
+            editor.setFontSize(parseInt(e.target.value));
+            canvas.focus();
+        });
+
+        clearBtn.addEventListener('click', () => {
+            editor.clear();
+            canvas.focus();
+        });
+
+        getTextBtn.addEventListener('click', () => {
+            const text = editor.getText();
+            alert('Current text:\n\n' + text);
+        });
+
+        setTextBtn.addEventListener('click', () => {
+            editor.setText('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris.');
+            canvas.focus();
+        });
+
+        // Focus canvas on load
+        canvas.focus();
+    </script>
+</body>
+</html>
