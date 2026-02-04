@@ -828,8 +828,28 @@
                     // If X is beyond the last text, place cursor at END of line
                     if (x >= lastTextEndX) {
                         console.log(`  -> Click X is beyond last text, placing cursor at end of line`);
-                        this.items.splice(this.cursorIdx(), 1);
-                        this.items.splice(lastTextIdx + 1, 0, new CursorLink());
+
+                        // First remove the cursor from wherever it is
+                        const oldCursorIdx = this.cursorIdx();
+                        this.items.splice(oldCursorIdx, 1);
+
+                        // Adjust lastTextIdx if cursor was before it
+                        let adjustedLastTextIdx = lastTextIdx;
+                        if (oldCursorIdx <= lastTextIdx) {
+                            adjustedLastTextIdx--;
+                        }
+
+                        // Check if there's a NewlineLink right after the last text
+                        // If so, place cursor BEFORE it (not after)
+                        let insertIdx = adjustedLastTextIdx + 1;
+                        if (insertIdx < this.items.length &&
+                            (this.items[insertIdx] instanceof NewlineLink ||
+                             this.items[insertIdx] instanceof VirtualNewlineLink)) {
+                            // Place cursor before the newline
+                            console.log(`  -> Found newline at index ${insertIdx}, placing cursor before it`);
+                        }
+
+                        this.items.splice(insertIdx, 0, new CursorLink());
                     } else {
                         // Otherwise, place cursor at BEGINNING of line
                         console.log(`  -> Click X is before/within text, placing cursor at start of line`);
