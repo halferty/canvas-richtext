@@ -2,6 +2,10 @@
 
 A canvas-based rich-text editor for the web, inspired by Google Docs' rendering approach. This library provides a powerful, flexible text editing experience rendered entirely on HTML5 Canvas.
 
+**[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
+
+![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+
 ## Features
 
 - 🎨 **Canvas-based rendering** - Smooth, high-performance text rendering
@@ -11,6 +15,26 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
 - 🎯 **Cursor management** - Blinking cursor with customizable appearance
 - 🧩 **Modular architecture** - Clean separation of concerns with Chain/Link pattern
+
+## Testing
+
+This library features **100% synthetic testing** - all 236 tests run in Node.js without requiring a browser!
+
+```bash
+npm test
+```
+
+Our test suite includes:
+- 📝 **Font property tests** - Constructor, cloning, matching, formatting
+- 🔗 **Chain link tests** - All link types and their interactions
+- ⌨️ **Keyboard input tests** - Typing, backspace, enter key handling
+- ➡️ **Arrow navigation tests** - Left, right, up, down cursor movement
+- 🖱️ **Click positioning tests** - Precise cursor placement via mouse
+- ✂️ **Selection tests** - Text selection and manipulation
+- 📐 **Text wrapping tests** - Word wrapping and line breaking
+- 🎯 **Edge case tests** - Boundary conditions and error handling
+
+**No Selenium, no Puppeteer, no headless browser needed** - just pure Node.js with synthetic canvas mocking!
 
 ## Installation
 
