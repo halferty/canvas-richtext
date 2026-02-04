@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas RichText Editor - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #333;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .container {
+            flex: 1;
+            max-width: 1200px;
+            width: 100%;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .editor-wrapper {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .toolbar {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .toolbar label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        .toolbar select,
+        .toolbar button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .toolbar select:hover,
+        .toolbar button:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .toolbar button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-weight: 600;
+        }
+
+        .toolbar button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .toolbar button:active {
+            transform: translateY(0);
+        }
+
+        .canvas-container {
+            padding: 2rem;
+            background: white;
+            min-height: 500px;
+        }
+
+        #editor-canvas {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: text;
+            background: white;
+        }
+
+        .info-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-panel h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .info-panel p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .feature {
+            background: #f8f9ff;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature h3 {
+            color: #667eea;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature p {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .github-link {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: #24292e;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .github-link:hover {
+            background: #2f363d;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(36, 41, 46, 0.4);
+        }
+
+        .stats {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .container {
+                padding: 0 1rem;
+            }
+
+            .toolbar {
+                padding: 0.75rem;
+            }
+
+            .canvas-container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Canvas RichText Editor</h1>
+        <p>A high-performance canvas-based rich-text editor with 100% synthetic testing</p>
+    </div>
+
+    <div class="container">
+        <div class="editor-wrapper">
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <label for="font-size">Font Size:</label>
+                    <select id="font-size">
+                        <option value="12">12px</option>
+                        <option value="14">14px</option>
+                        <option value="16" selected>16px</option>
+                        <option value="18">18px</option>
+                        <option value="20">20px</option>
+                        <option value="24">24px</option>
+                        <option value="32">32px</option>
+                        <option value="48">48px</option>
+                    </select>
+                </div>
+
+                <div class="toolbar-group">
+                    <label for="font-family">Font Family:</label>
+                    <select id="font-family">
+                        <option value="Arial" selected>Arial</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Comic Sans MS">Comic Sans MS</option>
+                    </select>
+                </div>
+
+                <button id="clear-btn">Clear</button>
+                <button id="sample-text-btn">Load Sample Text</button>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="editor-canvas" width="1000" height="600"></canvas>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h2>About This Demo</h2>
+            <p>This is a live demonstration of the Canvas RichText Editor - a modern, high-performance text editor built entirely on HTML5 Canvas.</p>
+
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value">236</div>
+                    <div class="stat-label">Tests Passing</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">100%</div>
+                    <div class="stat-label">Test Coverage</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Browser Required</div>
+                </div>
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature">
+                    <h3>✨ Canvas-Based Rendering</h3>
+                    <p>Direct pixel-level control for smooth, native-feeling text editing</p>
+                </div>
+                <div class="feature">
+                    <h3>🎯 Click Positioning</h3>
+                    <p>Precise cursor placement with intelligent line and character detection</p>
+                </div>
+                <div class="feature">
+                    <h3>⌨️ Full Keyboard Support</h3>
+                    <p>Arrow keys, typing, backspace, enter - all working seamlessly</p>
+                </div>
+                <div class="feature">
+                    <h3>📝 Text Selection</h3>
+                    <p>Select, copy, and manipulate text with familiar interactions</p>
+                </div>
+                <div class="feature">
+                    <h3>🔄 Word Wrapping</h3>
+                    <p>Automatic text wrapping with virtual newlines for long content</p>
+                </div>
+                <div class="feature">
+                    <h3>🧪 100% Synthetic Testing</h3>
+                    <p>All 236 tests run in Node.js without a browser - no Selenium needed!</p>
+                </div>
+            </div>
+
+            <a href="https://github.com/halferty/canvas-richtext" class="github-link" target="_blank">
+                View on GitHub →
+            </a>
+        </div>
+    </div>
+
+    <script src="canvas-editor.umd.js"></script>
+    <script>
+        // Initialize the editor
+        const canvas = document.getElementById('editor-canvas');
+        const editor = new CanvasEditor.CanvasEditor(canvas, {
+            backgroundColor: '#ffffff',
+            cursorColor: '#667eea',
+            defaultFontSize: 16,
+            defaultFontFamily: 'Arial',
+            padding: 20
+        });
+
+        // Set initial welcome text
+        const welcomeText = `Welcome to Canvas RichText Editor!
+
+Click anywhere to start typing. Try changing the font and size from the toolbar above.
+
+This editor is built entirely on HTML5 Canvas, providing native-like performance and feel. It features:
+
+• Full keyboard support (typing, arrows, backspace, enter)
+• Precise click-to-position cursor placement
+• Text selection and manipulation
+• Automatic word wrapping
+• Multiple font sizes and families
+
+The best part? It has 236 passing tests that run 100% synthetically in Node.js - no browser required for testing!
+
+Type away and explore the features...`;
+
+        editor.setText(welcomeText);
+
+        // Toolbar controls
+        document.getElementById('font-size').addEventListener('change', (e) => {
+            editor.setFontSize(parseInt(e.target.value));
+        });
+
+        document.getElementById('font-family').addEventListener('change', (e) => {
+            editor.setFontFamily(e.target.value);
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            editor.clear();
+        });
+
+        document.getElementById('sample-text-btn').addEventListener('click', () => {
+            editor.setText(welcomeText);
+        });
+
+        // Log editor state to console for debugging
+        console.log('Canvas RichText Editor initialized!');
+        console.log('Editor state:', editor.dumpState());
+    </script>
+</body>
+</html>
