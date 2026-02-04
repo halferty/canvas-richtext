@@ -1,12 +1,93 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createCanvas } from 'canvas';
 import { CanvasEditor } from '../src/CanvasEditor.js';
+
+// Mock requestAnimationFrame and cancelAnimationFrame for Node.js environment
+let animationFrameId = 0;
+const animationFrameCallbacks = new Map();
+
+global.requestAnimationFrame = (callback) => {
+    const id = ++animationFrameId;
+    animationFrameCallbacks.set(id, callback);
+    // Don't actually call the callback - we don't need animation in tests
+    return id;
+};
+
+global.cancelAnimationFrame = (id) => {
+    animationFrameCallbacks.delete(id);
+};
 
 describe('CanvasEditor API', () => {
 
     function createTestCanvas() {
-        return createCanvas(800, 600);
+        // Create a mock canvas object
+        const eventListeners = new Map();
+        const canvas = {
+            width: 800,
+            height: 600,
+            addEventListener: (event, handler) => {
+                if (!eventListeners.has(event)) {
+                    eventListeners.set(event, []);
+                }
+                eventListeners.get(event).push(handler);
+            },
+            removeEventListener: (event, handler) => {
+                if (eventListeners.has(event)) {
+                    const handlers = eventListeners.get(event);
+                    const index = handlers.indexOf(handler);
+                    if (index > -1) {
+                        handlers.splice(index, 1);
+                    }
+                }
+            },
+            getContext: (type) => {
+                let currentFont = '16px Arial';
+                let currentFillStyle = '#000000';
+                return {
+                    get font() {
+                        return currentFont;
+                    },
+                    set font(value) {
+                        currentFont = value;
+                    },
+                    get fillStyle() {
+                        return currentFillStyle;
+                    },
+                    set fillStyle(value) {
+                        currentFillStyle = value;
+                    },
+                    save() {},
+                    restore() {},
+                    translate() {},
+                    scale() {},
+                    rotate() {},
+                    measureText(text) {
+                        const fontSizeMatch = currentFont.match(/(\d+)px/);
+                        const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
+                        const charWidth = fontSize * 0.5;
+                        return {
+                            width: text.length * charWidth,
+                            actualBoundingBoxAscent: fontSize * 0.75,
+                            actualBoundingBoxDescent: fontSize * 0.25
+                        };
+                    },
+                    clearRect() {},
+                    fillRect() {},
+                    fillText() {},
+                    strokeRect() {},
+                    strokeText() {},
+                    beginPath() {},
+                    moveTo() {},
+                    lineTo() {},
+                    stroke() {},
+                    fill() {},
+                    clip() {},
+                    setLineDash() {},
+                    getLineDash() { return []; }
+                };
+            }
+        };
+        return canvas;
     }
 
     describe('Constructor', () => {

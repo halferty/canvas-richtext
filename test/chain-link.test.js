@@ -18,7 +18,9 @@ function createMockContext() {
         restore() {},
         measureText(text) {
             // Simple character-based width estimation
-            const fontSize = parseInt(currentFont) || 16;
+            // Parse font size from currentFont string (e.g., "16px Arial" -> 16)
+            const fontSizeMatch = currentFont.match(/(\d+)px/);
+            const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 16;
             const charWidth = fontSize * 0.5;
 
             return {
@@ -140,11 +142,12 @@ describe('ChainLink', () => {
                 const fontProps = new FontProperties(16, 'Arial');
                 const textLink = new TextLink('Original', fontProps);
 
-                const metrics1 = textLink.measureText(ctx, 'Override');
-                const metrics2 = textLink.measureText(ctx, 'Original');
+                const metrics1 = textLink.measureText(ctx, 'Short');
+                const metrics2 = textLink.measureText(ctx, 'MuchLongerText');
 
-                // Metrics should be different for different text
+                // Metrics should be different for different length text
                 assert.notStrictEqual(metrics1.width, metrics2.width);
+                assert.ok(metrics2.width > metrics1.width);
             });
 
             it('should use correct font properties', () => {
