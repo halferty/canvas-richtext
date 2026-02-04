@@ -76,7 +76,7 @@ describe('Edge Case Click Tests', () => {
         ctx = createMockContext();
         const fontProps = new FontProperties(16, 'Arial');
         chain = new Chain(800, ctx, fontProps);
-        
+
         chain.items = [
             new TextLink('T', fontProps.clone()),
             new TextLink('e', fontProps.clone()),
@@ -86,19 +86,24 @@ describe('Edge Case Click Tests', () => {
             new CursorLink()
         ];
         chain.recalc();
-        
+        // After recalc, adjacent TextLinks are joined: [TextLink('Test'), NewlineLink, CursorLink]
+
         // Click with huge X
         chain.clicked(99999, 0);
-        
+
         const cursorIdx = chain.cursorIdx();
-        assert.ok(cursorIdx >= 4, 'Cursor should be at end of line');
+        const items = chain.getItems();
+        // Cursor should be between the TextLink and NewlineLink (end of line)
+        assert.ok(cursorIdx === 1, `Cursor should be at end of line (index 1), got ${cursorIdx}`);
+        assert.ok(items[cursorIdx] instanceof CursorLink);
+        assert.ok(items[cursorIdx - 1] instanceof TextLink);
     });
 
     it('should handle extremely large Y coordinate', () => {
         ctx = createMockContext();
         const fontProps = new FontProperties(16, 'Arial');
         chain = new Chain(800, ctx, fontProps);
-        
+
         chain.items = [
             new TextLink('L', fontProps.clone()),
             new TextLink('i', fontProps.clone()),
@@ -115,12 +120,16 @@ describe('Edge Case Click Tests', () => {
             new CursorLink()
         ];
         chain.recalc();
-        
+        // After recalc: [TextLink('Line1'), NewlineLink, TextLink('Line2'), NewlineLink, CursorLink]
+
         // Click with huge Y
         chain.clicked(10, 99999);
-        
+
         const cursorIdx = chain.cursorIdx();
-        assert.ok(cursorIdx >= 10, 'Cursor should be near end of document');
+        const items = chain.getItems();
+        // Cursor should be at end of document
+        assert.ok(cursorIdx === items.length - 1, `Cursor should be at end (index ${items.length - 1}), got ${cursorIdx}`);
+        assert.ok(items[cursorIdx] instanceof CursorLink);
     });
 
     it('should handle extremely negative X coordinate', () => {

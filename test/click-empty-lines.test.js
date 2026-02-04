@@ -63,13 +63,15 @@ describe('Multiple Empty Lines Click Tests', () => {
         
         chain.items = items;
         chain.recalc();
-        
+        // After recalc: [TextLink('First'), NewlineLink, NewlineLink, NewlineLink, NewlineLink, TextLink('Last'), NewlineLink, CursorLink]
+
         // Click on first empty line (y=24)
         chain.clicked(50, 24);
-        
+
         const cursorIdx = chain.cursorIdx();
-        assert.ok(cursorIdx === 6 || cursorIdx === 7 || cursorIdx === 8, 
-            `Cursor should be on one of the empty lines, got ${cursorIdx}`);
+        // Cursor should be positioned on one of the empty line positions (indices 2, 3, or 4)
+        assert.ok(cursorIdx >= 2 && cursorIdx <= 4,
+            `Cursor should be on one of the empty lines (2-4), got ${cursorIdx}`);
     });
 
     it('should handle clicking on middle of multiple empty lines', () => {
@@ -170,14 +172,16 @@ describe('Multiple Empty Lines Click Tests', () => {
         
         chain.items = items;
         chain.recalc();
-        
+        // After recalc: [TextLink('Only'), NewlineLink, NewlineLink, NewlineLink, CursorLink]
+
         // Click way below everything
         chain.clicked(50, 200);
-        
+
         const cursorIdx = chain.cursorIdx();
+        const items2 = chain.getItems();
         // Should place at end of document
-        assert.ok(cursorIdx >= 5, 
-            `Cursor should be near end of document, got ${cursorIdx}`);
+        assert.ok(cursorIdx === items2.length - 1,
+            `Cursor should be at end of document (index ${items2.length - 1}), got ${cursorIdx}`);
     });
 
     it('should distinguish between consecutive empty lines when clicking precisely', () => {
