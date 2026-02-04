@@ -1103,12 +1103,9 @@
         handleKeyDown(e) {
             const key = e.key;
 
-            // Prevent default for most editor keys
-            if (key === 'Backspace' || key === 'Enter' || key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') {
-                e.preventDefault();
-            }
-
+            // Handle editor keys
             if (key === 'Backspace') {
+                e.preventDefault();
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 } else {
@@ -1116,29 +1113,36 @@
                 }
                 this.render();
             } else if (key === 'Enter') {
+                e.preventDefault();
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 }
                 this.chain.enterPressed();
                 this.render();
             } else if (key === 'ArrowLeft') {
+                e.preventDefault();
                 // leftArrowPressed handles selection internally
                 this.chain.leftArrowPressed();
                 this.render();
             } else if (key === 'ArrowRight') {
+                e.preventDefault();
                 // rightArrowPressed handles selection internally
                 this.chain.rightArrowPressed();
                 this.render();
             } else if (key === 'ArrowUp') {
+                e.preventDefault();
                 this.chain.clearSelection();
                 this.chain.upArrowPressed();
                 this.render();
             } else if (key === 'ArrowDown') {
+                e.preventDefault();
                 this.chain.clearSelection();
                 this.chain.downArrowPressed();
                 this.render();
             } else if (key.length === 1 && !e.ctrlKey && !e.metaKey) {
-                // Printable character - delete selection first if exists
+                // Printable character - prevent default to stop page scrolling
+                e.preventDefault();
+                // Delete selection first if exists
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 }
