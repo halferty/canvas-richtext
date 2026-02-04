@@ -766,10 +766,24 @@ export class Chain {
             }
             
             if (!foundEmptyLine && !foundTextLink) {
-                console.log(`  -> No match found, placing cursor at end`);
-                // Default: move to end
-                this.items.splice(this.cursorIdx(), 1);
-                this.items.push(new CursorLink());
+                // Check if Y is before the first line - if so, place at beginning
+                let firstLineY = Infinity;
+                for (let i = 0; i < this.items.length; i++) {
+                    if (this.items[i] instanceof TextLink && this.items[i].computed && this.items[i].computed.posY !== undefined) {
+                        firstLineY = Math.min(firstLineY, this.items[i].computed.posY);
+                    }
+                }
+
+                if (y < firstLineY - 50) { // If clicking well above first line
+                    console.log(`  -> Click is above first line (y=${y.toFixed(2)} < firstLineY=${firstLineY.toFixed(2)}), placing cursor at start`);
+                    this.items.splice(this.cursorIdx(), 1);
+                    this.items.unshift(new CursorLink());
+                } else {
+                    console.log(`  -> No match found, placing cursor at end`);
+                    // Default: move to end
+                    this.items.splice(this.cursorIdx(), 1);
+                    this.items.push(new CursorLink());
+                }
             }
             }
         }

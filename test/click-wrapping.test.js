@@ -103,13 +103,14 @@ describe('Text Wrapping Click Tests', () => {
         
         chain.items = items;
         chain.recalc();
-        
+
         // Click way to the right on the last visual line
         chain.clicked(200, 48);
-        
+
         const cursorIdx = chain.cursorIdx();
-        // Should place cursor at or near the end
-        assert.ok(cursorIdx >= text.length - 5, 
-            `Cursor should be near end of text, got index ${cursorIdx}`);
+        const items2 = chain.getItems();
+        // Should place cursor at or near the end (after recalc, items are chunked/wrapped)
+        assert.ok(cursorIdx >= items2.length - 3,
+            `Cursor should be near end of items array (total ${items2.length} items), got index ${cursorIdx}`);
     });
 });
