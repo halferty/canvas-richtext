@@ -72,16 +72,19 @@ export class CanvasEditor {
         this.boundHandleMouseMove = (e) => this.handleMouseMove(e);
         this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
 
-        // Keyboard events
-        this.canvas.addEventListener('keydown', this.boundHandleKeyDown);
-        
-        // Mouse events
-        this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
-        this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
-        this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
+        // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
+        if (typeof this.canvas.addEventListener === 'function') {
+            // Keyboard events
+            this.canvas.addEventListener('keydown', this.boundHandleKeyDown);
+            
+            // Mouse events
+            this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
+            this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
+            this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
 
-        // Make canvas focusable
-        this.canvas.tabIndex = 1;
+            // Make canvas focusable
+            this.canvas.tabIndex = 1;
+        }
     }
 
     handleKeyDown(e) {

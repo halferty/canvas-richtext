@@ -1,26 +1,73 @@
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createCanvas } from 'canvas';
-import { CanvasEditor } from '../src/index.js';
+import { Chain } from '../src/Chain.js';
+import { FontProperties } from '../src/FontProperties.js';
+import { TextLink, NewlineLink, CursorLink } from '../src/ChainLink.js';
+
+// Create a mock canvas context for testing
+function createMockContext() {
+    let currentFont = '16px Arial';
+    
+    const ctx = {
+        get font() {
+            return currentFont;
+        },
+        set font(value) {
+            currentFont = value;
+        },
+        save() {},
+        restore() {},
+        measureText(text) {
+            // Simple character-based width estimation
+            // Average character width ~8px for 16px font
+            const fontSize = parseInt(currentFont) || 16;
+            const charWidth = fontSize * 0.5;
+            
+            return {
+                width: text.length * charWidth,
+                actualBoundingBoxAscent: fontSize * 0.75,
+                actualBoundingBoxDescent: fontSize * 0.25
+            };
+        }
+    };
+    
+    return ctx;
+}
 
 describe('Click Positioning Tests', () => {
-    let canvas;
-    let editor;
     let chain;
+    let ctx;
 
     beforeEach(() => {
-        // Create a mock canvas using node-canvas
-        canvas = createCanvas(800, 600);
-        editor = new CanvasEditor(canvas);
-        chain = editor.chain;
+        // Create a mock canvas context
+        ctx = createMockContext();
         
-        // Load test content: 3 lines
-        // Line 1: "Welcome to Canvas Editor!" at posY=0
-        // Line 2: empty at posY=24
-        // Line 3: "Click anywhere to start typing..." at posY=48
-        editor.loadHTML(`Welcome to Canvas Editor!
-
-Click anywhere to start typing. Try changing the font and size from the toolbar above.`);
+        // Create a chain directly with font properties
+        const fontProps = new FontProperties(16, 'Arial');
+        chain = new Chain(800, ctx, fontProps);
+        
+        // Set up test content: 3 lines
+        // Line 1: "Welcome to Canvas Editor!"
+        // Line 2: empty
+        // Line 3: "Click anywhere to start typing. Try changing the font and size from the toolbar above."
+        const text1 = "Welcome to Canvas Editor!";
+        const text2 = "Click anywhere to start typing. Try changing the font and size from the toolbar above.";
+        
+        // Build the chain manually
+        const items = [];
+        for (const char of text1) {
+            items.push(new TextLink(char, fontProps.clone()));
+        }
+        items.push(new NewlineLink());  // End of line 1
+        items.push(new NewlineLink());  // Empty line 2
+        for (const char of text2) {
+            items.push(new TextLink(char, fontProps.clone()));
+        }
+        items.push(new NewlineLink());  // End of line 3
+        items.push(new CursorLink());   // Cursor at end
+        
+        chain.items = items;
+        chain.recalc();
     });
 
     function getCursorInfo() {

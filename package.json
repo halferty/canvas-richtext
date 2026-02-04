@@ -2,6 +2,7 @@
   "name": "canvas-richtext",
   "version": "0.1.0",
   "description": "A canvas-based rich-text editor for the web, similar to Google Docs",
+  "type": "module",
   "main": "dist/canvas-editor.js",
   "module": "dist/canvas-editor.esm.js",
   "types": "dist/index.d.ts",
