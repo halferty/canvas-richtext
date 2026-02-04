@@ -207,7 +207,7 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## License
 
-MIT License - feel free to use this in your projects!
+BSD License - feel free to use this in your projects!
 
 ## Roadmap
 
