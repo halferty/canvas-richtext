@@ -111,6 +111,34 @@
             transform: translateY(0);
         }
 
+        .toolbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .toolbar button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        #undo-btn,
+        #redo-btn {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            font-weight: 600;
+        }
+
+        #undo-btn:hover:not(:disabled),
+        #redo-btn:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #764ba2;
+            color: #764ba2;
+        }
+
         .canvas-container {
             padding: 2rem;
             background: white;
@@ -238,6 +266,11 @@
     <div class="container">
         <div class="editor-wrapper">
             <div class="toolbar">
+                <div class="toolbar-group">
+                    <button id="undo-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
+                    <button id="redo-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
+                </div>
+
                 <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
                     <select id="font-size">
@@ -379,22 +412,69 @@ Type away and explore the features...`;
 
         editor.setText(welcomeText);
 
-        // Toolbar controls
-        document.getElementById('font-size').addEventListener('change', (e) => {
-            editor.setFontSize(parseInt(e.target.value));
+        // Get toolbar elements
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        const fontSizeSelect = document.getElementById('font-size');
+        const fontFamilySelect = document.getElementById('font-family');
+
+        // Function to update toolbar state
+        function updateToolbar() {
+            // Update undo/redo button states
+            undoBtn.disabled = !editor.canUndo();
+            redoBtn.disabled = !editor.canRedo();
+
+            // Update font dropdowns to reflect current cursor position
+            const fontAtCursor = editor.getFontAtCursor();
+            fontSizeSelect.value = fontAtCursor.size;
+            fontFamilySelect.value = fontAtCursor.family;
+        }
+
+        // Undo/Redo buttons
+        undoBtn.addEventListener('click', () => {
+            editor.undo();
+            updateToolbar();
         });
 
-        document.getElementById('font-family').addEventListener('change', (e) => {
+        redoBtn.addEventListener('click', () => {
+            editor.redo();
+            updateToolbar();
+        });
+
+        // Font controls
+        fontSizeSelect.addEventListener('change', (e) => {
+            editor.setFontSize(parseInt(e.target.value));
+            canvas.focus(); // Refocus canvas after dropdown interaction
+            updateToolbar();
+        });
+
+        fontFamilySelect.addEventListener('change', (e) => {
             editor.setFontFamily(e.target.value);
+            canvas.focus(); // Refocus canvas after dropdown interaction
+            updateToolbar();
         });
 
         document.getElementById('clear-btn').addEventListener('click', () => {
             editor.clear();
+            updateToolbar();
         });
 
         document.getElementById('sample-text-btn').addEventListener('click', () => {
             editor.setText(welcomeText);
+            updateToolbar();
         });
+
+        // Update toolbar when canvas receives input
+        canvas.addEventListener('click', () => {
+            setTimeout(updateToolbar, 10); // Small delay to let cursor position update
+        });
+
+        canvas.addEventListener('keyup', () => {
+            updateToolbar();
+        });
+
+        // Initial toolbar update
+        updateToolbar();
 
         // Log editor state to console for debugging
         console.log('Canvas RichText Editor initialized!');

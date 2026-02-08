@@ -263,6 +263,32 @@ export class CanvasEditor {
         }
     }
 
+    // Get font properties at cursor position
+    getFontAtCursor() {
+        const items = this.chain.getItems();
+        const cursorIdx = this.chain.cursorIdx();
+
+        // Look backwards from cursor to find the most recent TextLink
+        for (let i = cursorIdx - 1; i >= 0; i--) {
+            if (items[i] instanceof TextLink) {
+                return {
+                    size: items[i].intrinsic.fontProperties.size,
+                    family: items[i].intrinsic.fontProperties.family,
+                    weight: items[i].intrinsic.fontProperties.weight,
+                    style: items[i].intrinsic.fontProperties.style
+                };
+            }
+        }
+
+        // No text before cursor, return current default
+        return {
+            size: this.chain.currentFontProperties.size,
+            family: this.chain.currentFontProperties.family,
+            weight: this.chain.currentFontProperties.weight,
+            style: this.chain.currentFontProperties.style
+        };
+    }
+
     deleteSelection() {
         if (!this.chain.hasSelection()) return;
 
@@ -874,6 +900,14 @@ export class CanvasEditor {
 
         this.historyIndex++;
         this.restoreSnapshot(this.history[this.historyIndex]);
+    }
+
+    canUndo() {
+        return this.historyIndex > 0;
+    }
+
+    canRedo() {
+        return this.historyIndex < this.history.length - 1;
     }
 
     resize(width, height) {
