@@ -53,9 +53,13 @@ export class CanvasEditor {
         this.clickCount = 0;
         this.clickResetTimeout = null;
 
-        // Debug crosshairs
-        this.debugCrosshairs = [];
-        this.debugCrosshairsDuration = 2000; // 2 seconds
+        // Undo/Redo history
+        this.history = [];
+        this.historyIndex = -1;
+        this.maxHistorySize = 100;
+
+        // Take initial snapshot
+        this.takeSnapshot();
 
         // Event listeners
         this.setupEventListeners();
@@ -89,10 +93,58 @@ export class CanvasEditor {
 
     handleKeyDown(e) {
         const key = e.key;
+        const ctrl = e.ctrlKey || e.metaKey;
+
+        // Undo/Redo shortcuts
+        if (ctrl && key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            this.undo();
+            this.resetCursorBlink();
+            return;
+        } else if (ctrl && (key === 'y' || (key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            this.redo();
+            this.resetCursorBlink();
+            return;
+        }
+
+        // Select All
+        if (ctrl && key === 'a') {
+            e.preventDefault();
+            this.selectAll();
+            this.render();
+            this.resetCursorBlink();
+            return;
+        }
+
+        // Copy
+        if (ctrl && key === 'c') {
+            e.preventDefault();
+            this.copy();
+            this.resetCursorBlink();
+            return;
+        }
+
+        // Cut
+        if (ctrl && key === 'x') {
+            e.preventDefault();
+            this.cut();
+            this.resetCursorBlink();
+            return;
+        }
+
+        // Paste
+        if (ctrl && key === 'v') {
+            e.preventDefault();
+            this.paste();
+            this.resetCursorBlink();
+            return;
+        }
 
         // Handle editor keys
         if (key === 'Backspace') {
             e.preventDefault();
+            this.takeSnapshot();
             if (this.chain.hasSelection()) {
                 this.deleteSelection();
             } else {
@@ -101,6 +153,7 @@ export class CanvasEditor {
             this.render();
         } else if (key === 'Enter') {
             e.preventDefault();
+            this.takeSnapshot();
             if (this.chain.hasSelection()) {
                 this.deleteSelection();
             }
@@ -126,9 +179,10 @@ export class CanvasEditor {
             this.chain.clearSelection();
             this.chain.downArrowPressed();
             this.render();
-        } else if (key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        } else if (key.length === 1 && !ctrl) {
             // Printable character - prevent default to stop page scrolling
             e.preventDefault();
+            this.takeSnapshot();
             // Delete selection first if exists
             if (this.chain.hasSelection()) {
                 this.deleteSelection();
@@ -139,6 +193,74 @@ export class CanvasEditor {
 
         // Reset cursor blink to stay visible for full cycle
         this.resetCursorBlink();
+    }
+
+    // Clipboard operations
+    selectAll() {
+        const items = this.chain.getItems();
+        let totalChars = 0;
+
+        for (let item of items) {
+            if (item instanceof TextLink) {
+                totalChars += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                totalChars += 1;
+            }
+        }
+
+        if (totalChars > 0) {
+            this.chain.selectionStart = 0;
+            this.chain.selectionEnd = totalChars;
+        }
+    }
+
+    copy() {
+        if (!this.chain.hasSelection()) return;
+
+        const selectedText = this.chain.getSelectedText();
+
+        // Use Clipboard API if available
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(selectedText).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+    }
+
+    cut() {
+        if (!this.chain.hasSelection()) return;
+
+        this.takeSnapshot();
+        this.copy();
+        this.deleteSelection();
+        this.render();
+    }
+
+    paste() {
+        // Use Clipboard API if available
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            navigator.clipboard.readText().then(text => {
+                this.takeSnapshot();
+
+                // Delete selection if exists
+                if (this.chain.hasSelection()) {
+                    this.deleteSelection();
+                }
+
+                // Insert pasted text
+                for (let char of text) {
+                    if (char === '\n') {
+                        this.chain.enterPressed();
+                    } else {
+                        this.chain.printableKeyPressed(char);
+                    }
+                }
+
+                this.render();
+            }).catch(err => {
+                console.error('Failed to paste text: ', err);
+            });
+        }
     }
 
     deleteSelection() {
@@ -199,14 +321,7 @@ export class CanvasEditor {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding;
-        
-        // Add debug crosshairs
-        this.debugCrosshairs.push({
-            x: x,
-            y: y,
-            timestamp: Date.now()
-        });
-        
+
         // Track click count for double/triple click
         const now = Date.now();
         if (now - this.lastClickTime < 500) {
@@ -468,12 +583,7 @@ export class CanvasEditor {
                 this.lastBlinkTime = now;
                 needsRender = true;
             }
-            
-            // Check if we have active debug crosshairs
-            if (this.debugCrosshairs.length > 0) {
-                needsRender = true;
-            }
-            
+
             if (needsRender) {
                 this.render();
             }
@@ -515,51 +625,7 @@ export class CanvasEditor {
             }
         }
 
-        // Render debug crosshairs
-        this.renderDebugCrosshairs();
-
         this.ctx.restore();
-    }
-
-    renderDebugCrosshairs() {
-        const now = Date.now();
-        
-        // Remove expired crosshairs
-        this.debugCrosshairs = this.debugCrosshairs.filter(
-            ch => now - ch.timestamp < this.debugCrosshairsDuration
-        );
-        
-        // Render remaining crosshairs with fade
-        for (let ch of this.debugCrosshairs) {
-            const age = now - ch.timestamp;
-            const opacity = 1 - (age / this.debugCrosshairsDuration);
-            
-            this.ctx.save();
-            this.ctx.strokeStyle = `rgba(255, 0, 0, ${opacity})`;
-            this.ctx.lineWidth = 1;
-            
-            // Draw crosshairs
-            const size = 20;
-            
-            // Horizontal line
-            this.ctx.beginPath();
-            this.ctx.moveTo(ch.x - size, ch.y);
-            this.ctx.lineTo(ch.x + size, ch.y);
-            this.ctx.stroke();
-            
-            // Vertical line
-            this.ctx.beginPath();
-            this.ctx.moveTo(ch.x, ch.y - size);
-            this.ctx.lineTo(ch.x, ch.y + size);
-            this.ctx.stroke();
-            
-            // Small circle at center
-            this.ctx.beginPath();
-            this.ctx.arc(ch.x, ch.y, 3, 0, Math.PI * 2);
-            this.ctx.stroke();
-            
-            this.ctx.restore();
-        }
     }
 
     renderSelection() {
@@ -719,9 +785,95 @@ export class CanvasEditor {
     }
 
     clear() {
+        this.takeSnapshot();
         this.chain.items = [new CursorLink()];
         this.chain.recalc();
         this.render();
+    }
+
+    // Undo/Redo System
+    takeSnapshot() {
+        // Remove any history after current index (when user makes new edit after undo)
+        if (this.historyIndex < this.history.length - 1) {
+            this.history = this.history.slice(0, this.historyIndex + 1);
+        }
+
+        // Create a deep copy of the chain state
+        const snapshot = {
+            items: this.chain.items.map(item => {
+                if (item instanceof TextLink) {
+                    return {
+                        type: 'TextLink',
+                        text: item.text,
+                        fontProperties: {
+                            size: item.intrinsic.fontProperties.size,
+                            family: item.intrinsic.fontProperties.family,
+                            weight: item.intrinsic.fontProperties.weight,
+                            style: item.intrinsic.fontProperties.style
+                        }
+                    };
+                } else if (item instanceof CursorLink) {
+                    return { type: 'CursorLink' };
+                } else if (item instanceof NewlineLink) {
+                    return { type: 'NewlineLink' };
+                }
+                return null;
+            }).filter(item => item !== null),
+            selectionStart: this.chain.selectionStart,
+            selectionEnd: this.chain.selectionEnd
+        };
+
+        this.history.push(snapshot);
+
+        // Limit history size
+        if (this.history.length > this.maxHistorySize) {
+            this.history.shift();
+        } else {
+            this.historyIndex++;
+        }
+    }
+
+    restoreSnapshot(snapshot) {
+        if (!snapshot) return;
+
+        // Restore chain items
+        this.chain.items = snapshot.items.map(item => {
+            if (item.type === 'TextLink') {
+                const fontProps = new FontProperties(
+                    item.fontProperties.size,
+                    item.fontProperties.family,
+                    item.fontProperties.weight,
+                    item.fontProperties.style
+                );
+                return new TextLink(item.text, fontProps);
+            } else if (item.type === 'CursorLink') {
+                return new CursorLink();
+            } else if (item.type === 'NewlineLink') {
+                return new NewlineLink();
+            }
+            return null;
+        }).filter(item => item !== null);
+
+        // Restore selection
+        this.chain.selectionStart = snapshot.selectionStart;
+        this.chain.selectionEnd = snapshot.selectionEnd;
+
+        this.chain.recalc();
+        this.render();
+    }
+
+    undo() {
+        if (this.historyIndex <= 0) return; // Nothing to undo
+
+        this.historyIndex--;
+        this.restoreSnapshot(this.history[this.historyIndex]);
+    }
+
+    redo() {
+        if (this.historyIndex >= this.history.length - 1) return; // Nothing to redo
+
+        this.historyIndex++;
+        this.restoreSnapshot(this.history[this.historyIndex]);
     }
 
     resize(width, height) {
