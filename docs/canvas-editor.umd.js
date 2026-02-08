@@ -1111,7 +1111,13 @@
             // Selection state
             this.isMouseDown = false;
             this.mouseDownPos = null;
-            
+
+            // Drag and drop state
+            this.isDragging = false;
+            this.dragStartX = 0;
+            this.dragStartY = 0;
+            this.draggedText = '';
+
             // Click tracking for double/triple click
             this.lastClickTime = 0;
             this.clickCount = 0;
@@ -1139,19 +1145,41 @@
             this.boundHandleMouseDown = (e) => this.handleMouseDown(e);
             this.boundHandleMouseMove = (e) => this.handleMouseMove(e);
             this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
+            this.boundHandleMouseOver = (e) => this.handleMouseOver(e);
 
             // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
             if (typeof this.canvas.addEventListener === 'function') {
                 // Keyboard events
                 this.canvas.addEventListener('keydown', this.boundHandleKeyDown);
-                
+
                 // Mouse events
                 this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
                 this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
                 this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
+                this.canvas.addEventListener('mouseover', this.boundHandleMouseOver);
 
-                // Make canvas focusable
+                // Make canvas focusable and set initial cursor
                 this.canvas.tabIndex = 1;
+                if (this.canvas.style) {
+                    this.canvas.style.cursor = 'text';
+                }
+            }
+        }
+
+        handleMouseOver(e) {
+            // Update cursor style when hovering over selection
+            if (!this.canvas.style) return; // No style property in test environment
+            if (this.isDragging) return; // Keep grabbing cursor while dragging
+
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding;
+
+            const pos = this.getCharacterAtPosition(x, y);
+            if (this.isPositionInSelection(pos)) {
+                this.canvas.style.cursor = 'grab';
+            } else {
+                this.canvas.style.cursor = 'text';
             }
         }
 
@@ -1420,7 +1448,7 @@
                 this.clickCount = 1;
             }
             this.lastClickTime = now;
-            
+
             // Reset click count after delay
             if (this.clickResetTimeout) {
                 clearTimeout(this.clickResetTimeout);
@@ -1428,15 +1456,18 @@
             this.clickResetTimeout = setTimeout(() => {
                 this.clickCount = 0;
             }, 500);
-            
+
             this.isMouseDown = true;
             this.mouseDownX = x;
             this.mouseDownY = y;
-            
+
             // Store the character position where mouse went down
             const startPos = this.getCharacterAtPosition(x, y);
             this.mouseDownCharPos = startPos;
-            
+
+            // Check if clicking within existing selection (for drag and drop)
+            const clickedInSelection = this.isPositionInSelection(startPos);
+
             // Handle multi-clicks
             if (this.clickCount === 2) {
                 // Double-click: select word (don't move cursor first!)
@@ -1446,13 +1477,19 @@
                 // Triple-click: select line (don't move cursor first!)
                 this.chain.clearSelection();
                 this.selectLine(startPos);
+            } else if (clickedInSelection && this.chain.hasSelection()) {
+                // Single click within selection: prepare for potential drag
+                // Don't clear selection yet - wait to see if user drags
+                this.dragStartX = x;
+                this.dragStartY = y;
+                this.draggedText = this.chain.getSelectedText();
             } else {
-                // Single click: clear selection and position cursor
+                // Single click outside selection: clear selection and position cursor
                 this.chain.clearSelection();
                 this.chain.clicked(x, y);
                 console.log('Single click - cursor repositioned');
             }
-            
+
             this.render();
 
             // Reset cursor blink to stay visible for full cycle
@@ -1463,14 +1500,35 @@
         }
 
         handleMouseMove(e) {
-            if (!this.isMouseDown || !this.mouseDownCharPos) return;
+            if (!this.isMouseDown) return;
 
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding;
 
-            // Require minimum drag distance to start selection (prevent accidental selection on click)
+            // Calculate drag distance
             const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
+
+            // Check if we should start dragging selected text
+            if (this.draggedText && !this.isDragging && dragDistance >= 5) {
+                // Start drag operation
+                this.isDragging = true;
+                if (this.canvas.style) {
+                    this.canvas.style.cursor = 'grabbing';
+                }
+                console.log('Started dragging selected text');
+                return;
+            }
+
+            // If we're dragging, just update cursor (actual drop happens in mouseup)
+            if (this.isDragging) {
+                return;
+            }
+
+            // Normal selection behavior (not dragging)
+            if (!this.mouseDownCharPos) return;
+
+            // Require minimum drag distance to start selection (prevent accidental selection on click)
             if (dragDistance < 3) return; // 3 pixel threshold
 
             // Find character position for current mouse position
@@ -1486,8 +1544,78 @@
         }
 
         handleMouseUp(e) {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding;
+
+            // Handle drag and drop completion
+            if (this.isDragging && this.draggedText) {
+                console.log('Completing drag and drop operation');
+
+                // Find drop position
+                const dropPos = this.getCharacterAtPosition(x, y);
+
+                if (dropPos) {
+                    const dropCharIdx = this.chain.getCharPosition(dropPos.itemIdx, dropPos.charOffset);
+
+                    // Only perform move if dropping outside the current selection
+                    if (dropCharIdx < this.chain.selectionStart || dropCharIdx > this.chain.selectionEnd) {
+                        this.takeSnapshot();
+
+                        // Get the text being moved
+                        const movedText = this.draggedText;
+
+                        // Delete text from original position
+                        this.deleteSelection();
+
+                        // Adjust drop position if it was after the deleted text
+                        let adjustedDropCharIdx = dropCharIdx;
+                        if (dropCharIdx > this.chain.selectionEnd) {
+                            // Drop was after selection, need to adjust for deleted text
+                            adjustedDropCharIdx -= (this.chain.selectionEnd - this.chain.selectionStart);
+                        }
+
+                        // Convert adjusted character index back to item/offset position
+                        const finalDropPos = this.chain.getItemFromCharPosition(adjustedDropCharIdx);
+
+                        // Move cursor to drop position
+                        const cursorIdx = this.chain.cursorIdx();
+                        this.chain.items.splice(cursorIdx, 1);
+                        this.chain.items.splice(finalDropPos.itemIdx, 0, new CursorLink());
+                        this.chain.recalc();
+
+                        // Insert the moved text at cursor position
+                        for (let char of movedText) {
+                            if (char === '\n') {
+                                this.chain.enterPressed();
+                            } else {
+                                this.chain.printableKeyPressed(char);
+                            }
+                        }
+
+                        this.render();
+                    }
+                }
+
+                // Reset drag state
+                this.isDragging = false;
+                this.draggedText = '';
+                if (this.canvas.style) {
+                    this.canvas.style.cursor = 'text';
+                }
+            }
+
             this.isMouseDown = false;
             this.mouseDownCharPos = null;
+            this.draggedText = '';
+        }
+
+        // Helper to check if a character position is within current selection
+        isPositionInSelection(pos) {
+            if (!pos || !this.chain.hasSelection()) return false;
+
+            const posCharIdx = this.chain.getCharPosition(pos.itemIdx, pos.charOffset);
+            return posCharIdx >= this.chain.selectionStart && posCharIdx < this.chain.selectionEnd;
         }
 
         // Helper to find character position at x, y coordinates
@@ -1989,6 +2117,7 @@
             this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
             this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
             this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
+            this.canvas.removeEventListener('mouseover', this.boundHandleMouseOver);
         }
 
         // Debug method to dump full editor state
