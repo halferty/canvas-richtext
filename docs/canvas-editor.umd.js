@@ -1117,10 +1117,6 @@
             this.clickCount = 0;
             this.clickResetTimeout = null;
 
-            // Debug crosshairs
-            this.debugCrosshairs = [];
-            this.debugCrosshairsDuration = 2000; // 2 seconds
-
             // Event listeners
             this.setupEventListeners();
 
@@ -1263,14 +1259,7 @@
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding;
-            
-            // Add debug crosshairs
-            this.debugCrosshairs.push({
-                x: x,
-                y: y,
-                timestamp: Date.now()
-            });
-            
+
             // Track click count for double/triple click
             const now = Date.now();
             if (now - this.lastClickTime < 500) {
@@ -1527,12 +1516,7 @@
                     this.lastBlinkTime = now;
                     needsRender = true;
                 }
-                
-                // Check if we have active debug crosshairs
-                if (this.debugCrosshairs.length > 0) {
-                    needsRender = true;
-                }
-                
+
                 if (needsRender) {
                     this.render();
                 }
@@ -1574,51 +1558,7 @@
                 }
             }
 
-            // Render debug crosshairs
-            this.renderDebugCrosshairs();
-
             this.ctx.restore();
-        }
-
-        renderDebugCrosshairs() {
-            const now = Date.now();
-            
-            // Remove expired crosshairs
-            this.debugCrosshairs = this.debugCrosshairs.filter(
-                ch => now - ch.timestamp < this.debugCrosshairsDuration
-            );
-            
-            // Render remaining crosshairs with fade
-            for (let ch of this.debugCrosshairs) {
-                const age = now - ch.timestamp;
-                const opacity = 1 - (age / this.debugCrosshairsDuration);
-                
-                this.ctx.save();
-                this.ctx.strokeStyle = `rgba(255, 0, 0, ${opacity})`;
-                this.ctx.lineWidth = 1;
-                
-                // Draw crosshairs
-                const size = 20;
-                
-                // Horizontal line
-                this.ctx.beginPath();
-                this.ctx.moveTo(ch.x - size, ch.y);
-                this.ctx.lineTo(ch.x + size, ch.y);
-                this.ctx.stroke();
-                
-                // Vertical line
-                this.ctx.beginPath();
-                this.ctx.moveTo(ch.x, ch.y - size);
-                this.ctx.lineTo(ch.x, ch.y + size);
-                this.ctx.stroke();
-                
-                // Small circle at center
-                this.ctx.beginPath();
-                this.ctx.arc(ch.x, ch.y, 3, 0, Math.PI * 2);
-                this.ctx.stroke();
-                
-                this.ctx.restore();
-            }
         }
 
         renderSelection() {
