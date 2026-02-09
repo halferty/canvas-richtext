@@ -391,6 +391,123 @@
             left: auto;
             right: 100%;
         }
+
+        /* Find/Replace Dialog */
+        .find-replace-dialog {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            z-index: 10001;
+            min-width: 350px;
+            font-size: 0.9rem;
+        }
+
+        .find-replace-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .find-replace-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: #667eea;
+        }
+
+        .find-replace-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            line-height: 1;
+        }
+
+        .find-replace-close:hover {
+            color: #667eea;
+        }
+
+        .find-replace-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+
+        .find-replace-row label {
+            min-width: 60px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .find-replace-row input[type="text"] {
+            flex: 1;
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .find-replace-row input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .find-replace-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .find-replace-buttons button {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .find-replace-buttons button:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .find-replace-buttons button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .find-replace-status {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+
+        .find-replace-options {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .find-replace-options label {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -428,6 +545,7 @@
 
                 <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
+                    <button id="decrease-font-btn" class="format-btn" title="Decrease font size">-</button>
                     <select id="font-size">
                         <option value="12">12px</option>
                         <option value="14">14px</option>
@@ -438,6 +556,7 @@
                         <option value="32">32px</option>
                         <option value="48">48px</option>
                     </select>
+                    <button id="increase-font-btn" class="format-btn" title="Increase font size">+</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -452,6 +571,18 @@
                     </select>
                 </div>
 
+                <div class="toolbar-group">
+                    <label for="line-spacing">Line Spacing:</label>
+                    <select id="line-spacing">
+                        <option value="1.0">1.0</option>
+                        <option value="1.15">1.15</option>
+                        <option value="1.5" selected>1.5</option>
+                        <option value="2.0">2.0</option>
+                        <option value="2.5">2.5</option>
+                    </select>
+                </div>
+
+                <button id="clear-formatting-btn" class="format-btn" title="Clear formatting">Clear Format</button>
                 <button id="clear-btn">Clear</button>
                 <button id="sample-text-btn">Load Sample Text</button>
             </div>
@@ -511,12 +642,23 @@
                     <div class="menu-item" data-action="subscript">
                         <span class="menu-label">Subscript</span>
                     </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" data-action="clear-formatting">
+                        <span class="menu-label">Clear Formatting</span>
+                    </div>
                 </div>
             </div>
             <div class="menu-item menu-item-submenu" data-action="font-size">
                 <span class="menu-label">Font Size</span>
                 <span class="menu-arrow">▶</span>
                 <div class="submenu">
+                    <div class="menu-item" data-action="increase-font-size">
+                        <span class="menu-label">Increase</span>
+                    </div>
+                    <div class="menu-item" data-action="decrease-font-size">
+                        <span class="menu-label">Decrease</span>
+                    </div>
+                    <div class="menu-separator"></div>
                     <div class="menu-item" data-action="font-size-12" data-value="12">
                         <span class="menu-label">12px</span>
                     </div>
@@ -580,11 +722,66 @@
                     </div>
                 </div>
             </div>
+            <div class="menu-item menu-item-submenu" data-action="line-spacing">
+                <span class="menu-label">Line Spacing</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="line-spacing-1.0" data-value="1.0">
+                        <span class="menu-label">1.0</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-1.15" data-value="1.15">
+                        <span class="menu-label">1.15</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-1.5" data-value="1.5">
+                        <span class="menu-label">1.5</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-2.0" data-value="2.0">
+                        <span class="menu-label">2.0</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-2.5" data-value="2.5">
+                        <span class="menu-label">2.5</span>
+                    </div>
+                </div>
+            </div>
             <div class="menu-separator"></div>
             <div class="menu-item" data-action="select-all">
                 <span class="menu-label">Select All</span>
                 <span class="menu-shortcut">Ctrl+A</span>
             </div>
+        </div>
+
+        <!-- Find/Replace Dialog -->
+        <div id="find-replace-dialog" class="find-replace-dialog" style="display: none;">
+            <div class="find-replace-header">
+                <h3>Find and Replace</h3>
+                <button class="find-replace-close" id="find-replace-close">&times;</button>
+            </div>
+
+            <div class="find-replace-row">
+                <label for="find-input">Find:</label>
+                <input type="text" id="find-input" placeholder="Enter search text">
+            </div>
+
+            <div class="find-replace-row">
+                <label for="replace-input">Replace:</label>
+                <input type="text" id="replace-input" placeholder="Enter replacement text">
+            </div>
+
+            <div class="find-replace-options">
+                <label>
+                    <input type="checkbox" id="case-sensitive-checkbox">
+                    Match case
+                </label>
+            </div>
+
+            <div class="find-replace-buttons">
+                <button id="find-next-btn">Find Next</button>
+                <button id="find-previous-btn">Find Previous</button>
+                <button id="replace-btn">Replace</button>
+                <button id="replace-all-btn">Replace All</button>
+            </div>
+
+            <div class="find-replace-status" id="find-replace-status"></div>
         </div>
 
         <div class="info-panel">
@@ -711,7 +908,11 @@ Type away and explore the features...`;
         const alignCenterBtn = document.getElementById('align-center-btn');
         const textColorInput = document.getElementById('text-color');
         const fontSizeSelect = document.getElementById('font-size');
+        const increaseFontBtn = document.getElementById('increase-font-btn');
+        const decreaseFontBtn = document.getElementById('decrease-font-btn');
         const fontFamilySelect = document.getElementById('font-family');
+        const lineSpacingSelect = document.getElementById('line-spacing');
+        const clearFormattingBtn = document.getElementById('clear-formatting-btn');
 
         // Function to update toolbar state
         function updateToolbar() {
@@ -724,6 +925,7 @@ Type away and explore the features...`;
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
             textColorInput.value = fontAtCursor.color || '#000000';
+            lineSpacingSelect.value = editor.getLineSpacing();
 
             // Update formatting button active states
             boldBtn.classList.toggle('active', fontAtCursor.weight === 'bold');
@@ -754,70 +956,94 @@ Type away and explore the features...`;
         // Formatting buttons
         boldBtn.addEventListener('click', () => {
             editor.toggleBold();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         italicBtn.addEventListener('click', () => {
             editor.toggleItalic();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         underlineBtn.addEventListener('click', () => {
             editor.toggleUnderline();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         strikethroughBtn.addEventListener('click', () => {
             editor.toggleStrikethrough();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         superscriptBtn.addEventListener('click', () => {
             editor.toggleSuperscript();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         subscriptBtn.addEventListener('click', () => {
             editor.toggleSubscript();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Alignment buttons
         alignLeftBtn.addEventListener('click', () => {
             editor.setAlignment('left');
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         alignCenterBtn.addEventListener('click', () => {
             editor.setAlignment('center');
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Text color control
         textColorInput.addEventListener('input', (e) => {
             editor.setTextColor(e.target.value);
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Font controls
         fontSizeSelect.addEventListener('change', (e) => {
             editor.setFontSize(parseInt(e.target.value));
-            canvas.focus(); // Refocus canvas after dropdown interaction
+            canvas.focus({ preventScroll: true }); // Refocus canvas after dropdown interaction
+            updateToolbar();
+        });
+
+        increaseFontBtn.addEventListener('click', () => {
+            editor.increaseFontSize();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        decreaseFontBtn.addEventListener('click', () => {
+            editor.decreaseFontSize();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         fontFamilySelect.addEventListener('change', (e) => {
             editor.setFontFamily(e.target.value);
-            canvas.focus(); // Refocus canvas after dropdown interaction
+            canvas.focus({ preventScroll: true }); // Refocus canvas after dropdown interaction
+            updateToolbar();
+        });
+
+        lineSpacingSelect.addEventListener('change', (e) => {
+            editor.setLineSpacing(parseFloat(e.target.value));
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        clearFormattingBtn.addEventListener('click', () => {
+            editor.clearFormatting();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
@@ -971,6 +1197,15 @@ Type away and explore the features...`;
                 case 'align-center':
                     editor.setAlignment('center');
                     break;
+                case 'increase-font-size':
+                    editor.increaseFontSize();
+                    break;
+                case 'decrease-font-size':
+                    editor.decreaseFontSize();
+                    break;
+                case 'clear-formatting':
+                    editor.clearFormatting();
+                    break;
                 case 'select-all':
                     editor.selectAll();
                     break;
@@ -986,10 +1221,15 @@ Type away and explore the features...`;
                 editor.setFontFamily(value);
             }
 
+            // Handle line spacing changes
+            if (action.startsWith('line-spacing-') && value) {
+                editor.setLineSpacing(parseFloat(value));
+            }
+
             // Close menu and refocus canvas
             contextMenu.style.display = 'none';
             contextMenuVisible = false;
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
@@ -1008,6 +1248,130 @@ Type away and explore the features...`;
                 }
             });
         }, true);
+
+        // Find/Replace Dialog
+        const findReplaceDialog = document.getElementById('find-replace-dialog');
+        const findInput = document.getElementById('find-input');
+        const replaceInput = document.getElementById('replace-input');
+        const caseSensitiveCheckbox = document.getElementById('case-sensitive-checkbox');
+        const findNextBtn = document.getElementById('find-next-btn');
+        const findPreviousBtn = document.getElementById('find-previous-btn');
+        const replaceBtn = document.getElementById('replace-btn');
+        const replaceAllBtn = document.getElementById('replace-all-btn');
+        const findReplaceStatus = document.getElementById('find-replace-status');
+        const findReplaceClose = document.getElementById('find-replace-close');
+
+        function openFindReplace(showReplace = false) {
+            findReplaceDialog.style.display = 'block';
+            findInput.focus();
+            findInput.select();
+        }
+
+        function closeFindReplaceDialog() {
+            findReplaceDialog.style.display = 'none';
+            editor.closeFindReplace();
+            canvas.focus({ preventScroll: true });
+        }
+
+        function updateFindReplaceStatus(result) {
+            if (!result) {
+                findReplaceStatus.textContent = '';
+                return;
+            }
+
+            if (result.count === 0) {
+                findReplaceStatus.textContent = 'No matches found';
+            } else {
+                findReplaceStatus.textContent = `${result.current} of ${result.count} matches`;
+            }
+
+            if (result.replaced !== undefined) {
+                findReplaceStatus.textContent = `Replaced ${result.replaced} occurrence${result.replaced !== 1 ? 's' : ''}`;
+            }
+        }
+
+        findInput.addEventListener('input', () => {
+            const query = findInput.value;
+            const caseSensitive = caseSensitiveCheckbox.checked;
+            const result = editor.find(query, caseSensitive);
+            updateFindReplaceStatus(result);
+        });
+
+        caseSensitiveCheckbox.addEventListener('change', () => {
+            const query = findInput.value;
+            if (query) {
+                const caseSensitive = caseSensitiveCheckbox.checked;
+                const result = editor.find(query, caseSensitive);
+                updateFindReplaceStatus(result);
+            }
+        });
+
+        findNextBtn.addEventListener('click', () => {
+            const result = editor.findNext();
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        findPreviousBtn.addEventListener('click', () => {
+            const result = editor.findPrevious();
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        replaceBtn.addEventListener('click', () => {
+            const replacement = replaceInput.value;
+            const result = editor.replace(replacement);
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        replaceAllBtn.addEventListener('click', () => {
+            const replacement = replaceInput.value;
+            const result = editor.replaceAll(replacement);
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        findReplaceClose.addEventListener('click', closeFindReplaceDialog);
+
+        // Keyboard shortcuts for find/replace
+        canvas.addEventListener('keydown', (e) => {
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            if (ctrl && e.key === 'f') {
+                e.preventDefault();
+                openFindReplace(false);
+            }
+
+            if (ctrl && e.key === 'h') {
+                e.preventDefault();
+                openFindReplace(true);
+            }
+
+            if (e.key === 'Escape' && findReplaceDialog.style.display === 'block') {
+                e.preventDefault();
+                closeFindReplaceDialog();
+            }
+        });
+
+        // Find Next on Enter in find input
+        findInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const result = editor.findNext();
+                updateFindReplaceStatus(result);
+            }
+        });
+
+        // Replace on Enter in replace input
+        replaceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const replacement = replaceInput.value;
+                const result = editor.replace(replacement);
+                updateFindReplaceStatus(result);
+            }
+        });
     </script>
 </body>
 </html>

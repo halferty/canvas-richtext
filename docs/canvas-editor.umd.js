@@ -1174,6 +1174,12 @@
             // Paragraph alignment (keyed by paragraph index)
             this.paragraphAlignments = new Map();
 
+            // Find/Replace state
+            this.findMatches = [];
+            this.currentMatchIndex = -1;
+            this.findQuery = '';
+            this.caseSensitive = false;
+
             // Take initial snapshot
             this.takeSnapshot();
 
@@ -1892,7 +1898,12 @@
             this.ctx.save();
             this.ctx.translate(this.options.padding, this.options.padding);
 
-            // Render selection highlight first
+            // Render find matches first
+            if (this.findMatches.length > 0) {
+                this.renderFindMatches();
+            }
+
+            // Render selection highlight
             if (this.chain.hasSelection()) {
                 this.renderSelection();
             }
@@ -1945,6 +1956,47 @@
                     pos += item.text.length;
                 } else if (item instanceof NewlineLink) {
                     pos += 1;
+                }
+            }
+        }
+
+        renderFindMatches() {
+            const items = this.chain.getItems();
+
+            for (let matchIdx = 0; matchIdx < this.findMatches.length; matchIdx++) {
+                const match = this.findMatches[matchIdx];
+                const isCurrent = matchIdx === this.currentMatchIndex;
+
+                // Use different colors for current vs other matches
+                this.ctx.fillStyle = isCurrent ? 'rgba(255, 165, 0, 0.5)' : 'rgba(255, 255, 0, 0.4)';
+
+                let pos = 0;
+                for (let item of items) {
+                    if (item instanceof TextLink) {
+                        const itemStart = pos;
+                        const itemEnd = pos + item.text.length;
+
+                        if (itemEnd > match.start && itemStart < match.end) {
+                            const startOffset = Math.max(0, match.start - itemStart);
+                            const endOffset = Math.min(item.text.length, match.end - itemStart);
+
+                            // Measure text positions
+                            const beforeText = item.text.substring(0, startOffset);
+                            const matchedText = item.text.substring(startOffset, endOffset);
+
+                            const beforeWidth = startOffset > 0 ? item.measureText(this.ctx, beforeText).width : 0;
+                            const matchWidth = item.measureText(this.ctx, matchedText).width;
+
+                            const x = item.getPosX() + beforeWidth;
+                            const y = item.getPosY() - (item.getAscent() || 0);
+                            const height = (item.getAscent() || 0) + (item.getDescent() || 0);
+
+                            this.ctx.fillRect(x, y, matchWidth, height);
+                        }
+                        pos += item.text.length;
+                    } else if (item instanceof NewlineLink) {
+                        pos += 1;
+                    }
                 }
             }
         }
@@ -2079,8 +2131,72 @@
                     pos += 1;
                 }
             }
-            
+
             this.chain.recalc();
+        }
+
+        increaseFontSize() {
+            const currentSize = this.chain.currentFontProperties.size;
+            const newSize = Math.min(currentSize + 2, 72); // Max 72px
+            this.setFontSize(newSize);
+        }
+
+        decreaseFontSize() {
+            const currentSize = this.chain.currentFontProperties.size;
+            const newSize = Math.max(currentSize - 2, 8); // Min 8px
+            this.setFontSize(newSize);
+        }
+
+        clearFormatting() {
+            if (!this.chain.hasSelection()) {
+                return;
+            }
+
+            this.takeSnapshot();
+
+            const items = this.chain.getItems();
+            let pos = 0;
+            const selStart = this.chain.selectionStart;
+            const selEnd = this.chain.selectionEnd;
+
+            for (let item of items) {
+                if (item instanceof TextLink) {
+                    const itemStart = pos;
+                    const itemEnd = pos + item.text.length;
+
+                    // If this item overlaps with the selection, reset to default formatting
+                    if (itemEnd > selStart && itemStart < selEnd) {
+                        const defaultProps = this.defaultFontProperties;
+                        item.intrinsic.fontProperties = new FontProperties(
+                            defaultProps.size,
+                            defaultProps.family,
+                            'normal', // weight
+                            'normal', // style
+                            false,    // underline
+                            false,    // strikethrough
+                            false,    // superscript
+                            false,    // subscript
+                            '#000000' // color
+                        );
+                    }
+                    pos += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    pos += 1;
+                }
+            }
+
+            this.chain.recalc();
+            this.render();
+        }
+
+        setLineSpacing(spacing) {
+            this.chain.LINE_SPACING_MULT = spacing;
+            this.chain.recalc();
+            this.render();
+        }
+
+        getLineSpacing() {
+            return this.chain.LINE_SPACING_MULT;
         }
 
         // Text formatting methods
@@ -2301,6 +2417,176 @@
                     this.chain.printableKeyPressed(char);
                 }
             }
+            this.render();
+        }
+
+        // Find/Replace functionality
+        find(query, caseSensitive = false) {
+            this.findQuery = query;
+            this.caseSensitive = caseSensitive;
+            this.findMatches = [];
+            this.currentMatchIndex = -1;
+
+            if (!query) {
+                this.render();
+                return { count: 0, current: -1 };
+            }
+
+            const text = this.getText();
+            const searchText = caseSensitive ? text : text.toLowerCase();
+            const searchQuery = caseSensitive ? query : query.toLowerCase();
+
+            let index = 0;
+            while (index < searchText.length) {
+                const foundIndex = searchText.indexOf(searchQuery, index);
+                if (foundIndex === -1) break;
+
+                this.findMatches.push({
+                    start: foundIndex,
+                    end: foundIndex + query.length
+                });
+
+                index = foundIndex + 1;
+            }
+
+            if (this.findMatches.length > 0) {
+                this.currentMatchIndex = 0;
+                this.selectMatch(this.currentMatchIndex);
+            }
+
+            this.render();
+            return { count: this.findMatches.length, current: this.currentMatchIndex + 1 };
+        }
+
+        findNext() {
+            if (this.findMatches.length === 0) return;
+
+            this.currentMatchIndex = (this.currentMatchIndex + 1) % this.findMatches.length;
+            this.selectMatch(this.currentMatchIndex);
+            this.render();
+            return { count: this.findMatches.length, current: this.currentMatchIndex + 1 };
+        }
+
+        findPrevious() {
+            if (this.findMatches.length === 0) return;
+
+            this.currentMatchIndex = this.currentMatchIndex - 1;
+            if (this.currentMatchIndex < 0) {
+                this.currentMatchIndex = this.findMatches.length - 1;
+            }
+            this.selectMatch(this.currentMatchIndex);
+            this.render();
+            return { count: this.findMatches.length, current: this.currentMatchIndex + 1 };
+        }
+
+        selectMatch(matchIndex) {
+            if (matchIndex < 0 || matchIndex >= this.findMatches.length) return;
+
+            const match = this.findMatches[matchIndex];
+
+            // Convert character position to item position
+            const items = this.chain.getItems();
+            let charPos = 0;
+            let startItemIdx = -1, startOffset = 0;
+            let endItemIdx = -1, endOffset = 0;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i] instanceof TextLink) {
+                    const itemStart = charPos;
+                    const itemEnd = charPos + items[i].text.length;
+
+                    if (startItemIdx === -1 && match.start >= itemStart && match.start < itemEnd) {
+                        startItemIdx = i;
+                        startOffset = match.start - itemStart;
+                    }
+
+                    if (match.end > itemStart && match.end <= itemEnd) {
+                        endItemIdx = i;
+                        endOffset = match.end - itemStart;
+                        break;
+                    }
+
+                    charPos += items[i].text.length;
+                } else if (items[i] instanceof NewlineLink) {
+                    charPos += 1;
+                }
+            }
+
+            if (startItemIdx !== -1 && endItemIdx !== -1) {
+                this.chain.setSelection(startItemIdx, startOffset, endItemIdx, endOffset);
+            }
+        }
+
+        replace(replacement) {
+            if (this.currentMatchIndex < 0 || this.currentMatchIndex >= this.findMatches.length) {
+                return;
+            }
+
+            this.takeSnapshot();
+
+            const match = this.findMatches[this.currentMatchIndex];
+
+            // Delete the matched text and insert replacement
+            const text = this.getText();
+            const newText = text.substring(0, match.start) + replacement + text.substring(match.end);
+
+            this.setText(newText);
+
+            // Recalculate matches with new text
+            const lengthDiff = replacement.length - (match.end - match.start);
+
+            // Update subsequent match positions
+            for (let i = this.currentMatchIndex + 1; i < this.findMatches.length; i++) {
+                this.findMatches[i].start += lengthDiff;
+                this.findMatches[i].end += lengthDiff;
+            }
+
+            // Remove the replaced match
+            this.findMatches.splice(this.currentMatchIndex, 1);
+
+            // Move to next match or stay at current position
+            if (this.currentMatchIndex >= this.findMatches.length) {
+                this.currentMatchIndex = this.findMatches.length - 1;
+            }
+
+            if (this.findMatches.length > 0 && this.currentMatchIndex >= 0) {
+                this.selectMatch(this.currentMatchIndex);
+            } else {
+                this.currentMatchIndex = -1;
+            }
+
+            this.render();
+            return { count: this.findMatches.length, current: this.currentMatchIndex + 1 };
+        }
+
+        replaceAll(replacement) {
+            if (this.findMatches.length === 0) {
+                return { count: 0, replaced: 0 };
+            }
+
+            this.takeSnapshot();
+
+            const replacedCount = this.findMatches.length;
+            let text = this.getText();
+
+            // Replace from end to beginning to maintain indices
+            for (let i = this.findMatches.length - 1; i >= 0; i--) {
+                const match = this.findMatches[i];
+                text = text.substring(0, match.start) + replacement + text.substring(match.end);
+            }
+
+            this.setText(text);
+            this.findMatches = [];
+            this.currentMatchIndex = -1;
+            this.render();
+
+            return { count: 0, replaced: replacedCount };
+        }
+
+        closeFindReplace() {
+            this.findMatches = [];
+            this.currentMatchIndex = -1;
+            this.findQuery = '';
             this.render();
         }
 
