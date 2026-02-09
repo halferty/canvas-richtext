@@ -391,6 +391,123 @@
             left: auto;
             right: 100%;
         }
+
+        /* Find/Replace Dialog */
+        .find-replace-dialog {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            z-index: 10001;
+            min-width: 350px;
+            font-size: 0.9rem;
+        }
+
+        .find-replace-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .find-replace-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: #667eea;
+        }
+
+        .find-replace-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            line-height: 1;
+        }
+
+        .find-replace-close:hover {
+            color: #667eea;
+        }
+
+        .find-replace-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+
+        .find-replace-row label {
+            min-width: 60px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .find-replace-row input[type="text"] {
+            flex: 1;
+            padding: 0.4rem 0.6rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .find-replace-row input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .find-replace-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .find-replace-buttons button {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .find-replace-buttons button:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .find-replace-buttons button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .find-replace-status {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+
+        .find-replace-options {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .find-replace-options label {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -631,6 +748,40 @@
                 <span class="menu-label">Select All</span>
                 <span class="menu-shortcut">Ctrl+A</span>
             </div>
+        </div>
+
+        <!-- Find/Replace Dialog -->
+        <div id="find-replace-dialog" class="find-replace-dialog" style="display: none;">
+            <div class="find-replace-header">
+                <h3>Find and Replace</h3>
+                <button class="find-replace-close" id="find-replace-close">&times;</button>
+            </div>
+
+            <div class="find-replace-row">
+                <label for="find-input">Find:</label>
+                <input type="text" id="find-input" placeholder="Enter search text">
+            </div>
+
+            <div class="find-replace-row">
+                <label for="replace-input">Replace:</label>
+                <input type="text" id="replace-input" placeholder="Enter replacement text">
+            </div>
+
+            <div class="find-replace-options">
+                <label>
+                    <input type="checkbox" id="case-sensitive-checkbox">
+                    Match case
+                </label>
+            </div>
+
+            <div class="find-replace-buttons">
+                <button id="find-next-btn">Find Next</button>
+                <button id="find-previous-btn">Find Previous</button>
+                <button id="replace-btn">Replace</button>
+                <button id="replace-all-btn">Replace All</button>
+            </div>
+
+            <div class="find-replace-status" id="find-replace-status"></div>
         </div>
 
         <div class="info-panel">
@@ -1097,6 +1248,130 @@ Type away and explore the features...`;
                 }
             });
         }, true);
+
+        // Find/Replace Dialog
+        const findReplaceDialog = document.getElementById('find-replace-dialog');
+        const findInput = document.getElementById('find-input');
+        const replaceInput = document.getElementById('replace-input');
+        const caseSensitiveCheckbox = document.getElementById('case-sensitive-checkbox');
+        const findNextBtn = document.getElementById('find-next-btn');
+        const findPreviousBtn = document.getElementById('find-previous-btn');
+        const replaceBtn = document.getElementById('replace-btn');
+        const replaceAllBtn = document.getElementById('replace-all-btn');
+        const findReplaceStatus = document.getElementById('find-replace-status');
+        const findReplaceClose = document.getElementById('find-replace-close');
+
+        function openFindReplace(showReplace = false) {
+            findReplaceDialog.style.display = 'block';
+            findInput.focus();
+            findInput.select();
+        }
+
+        function closeFindReplaceDialog() {
+            findReplaceDialog.style.display = 'none';
+            editor.closeFindReplace();
+            canvas.focus({ preventScroll: true });
+        }
+
+        function updateFindReplaceStatus(result) {
+            if (!result) {
+                findReplaceStatus.textContent = '';
+                return;
+            }
+
+            if (result.count === 0) {
+                findReplaceStatus.textContent = 'No matches found';
+            } else {
+                findReplaceStatus.textContent = `${result.current} of ${result.count} matches`;
+            }
+
+            if (result.replaced !== undefined) {
+                findReplaceStatus.textContent = `Replaced ${result.replaced} occurrence${result.replaced !== 1 ? 's' : ''}`;
+            }
+        }
+
+        findInput.addEventListener('input', () => {
+            const query = findInput.value;
+            const caseSensitive = caseSensitiveCheckbox.checked;
+            const result = editor.find(query, caseSensitive);
+            updateFindReplaceStatus(result);
+        });
+
+        caseSensitiveCheckbox.addEventListener('change', () => {
+            const query = findInput.value;
+            if (query) {
+                const caseSensitive = caseSensitiveCheckbox.checked;
+                const result = editor.find(query, caseSensitive);
+                updateFindReplaceStatus(result);
+            }
+        });
+
+        findNextBtn.addEventListener('click', () => {
+            const result = editor.findNext();
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        findPreviousBtn.addEventListener('click', () => {
+            const result = editor.findPrevious();
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        replaceBtn.addEventListener('click', () => {
+            const replacement = replaceInput.value;
+            const result = editor.replace(replacement);
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        replaceAllBtn.addEventListener('click', () => {
+            const replacement = replaceInput.value;
+            const result = editor.replaceAll(replacement);
+            updateFindReplaceStatus(result);
+            canvas.focus({ preventScroll: true });
+        });
+
+        findReplaceClose.addEventListener('click', closeFindReplaceDialog);
+
+        // Keyboard shortcuts for find/replace
+        canvas.addEventListener('keydown', (e) => {
+            const ctrl = e.ctrlKey || e.metaKey;
+
+            if (ctrl && e.key === 'f') {
+                e.preventDefault();
+                openFindReplace(false);
+            }
+
+            if (ctrl && e.key === 'h') {
+                e.preventDefault();
+                openFindReplace(true);
+            }
+
+            if (e.key === 'Escape' && findReplaceDialog.style.display === 'block') {
+                e.preventDefault();
+                closeFindReplaceDialog();
+            }
+        });
+
+        // Find Next on Enter in find input
+        findInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const result = editor.findNext();
+                updateFindReplaceStatus(result);
+            }
+        });
+
+        // Replace on Enter in replace input
+        replaceInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const replacement = replaceInput.value;
+                const result = editor.replace(replacement);
+                updateFindReplaceStatus(result);
+            }
+        });
     </script>
 </body>
 </html>
