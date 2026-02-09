@@ -862,7 +862,7 @@ export class CanvasEditor {
             : fontProps.toFontString();
 
         this.ctx.font = fontString;
-        this.ctx.fillStyle = '#000000';
+        this.ctx.fillStyle = fontProps.color || '#000000';
         this.ctx.fillText(textLink.text, posX, posY);
 
         // Measure text for decoration lines
@@ -871,7 +871,7 @@ export class CanvasEditor {
 
         // Draw underline
         if (fontProps.underline) {
-            this.ctx.strokeStyle = '#000000';
+            this.ctx.strokeStyle = fontProps.color || '#000000';
             this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
             this.ctx.beginPath();
             const underlineY = posY + fontSize * 0.1;
@@ -882,7 +882,7 @@ export class CanvasEditor {
 
         // Draw strikethrough
         if (fontProps.strikethrough) {
-            this.ctx.strokeStyle = '#000000';
+            this.ctx.strokeStyle = fontProps.color || '#000000';
             this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
             this.ctx.beginPath();
             const strikeY = posY - fontSize * 0.3;
@@ -1043,6 +1043,17 @@ export class CanvasEditor {
         } else {
             // Toggle for next typed text
             this.chain.currentFontProperties.toggleSubscript();
+        }
+    }
+
+    setTextColor(color) {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('color', () => color);
+            this.render();
+        } else {
+            // Set for next typed text
+            this.chain.currentFontProperties.color = color;
         }
     }
 

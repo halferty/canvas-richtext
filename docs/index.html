@@ -305,6 +305,11 @@
                 </div>
 
                 <div class="toolbar-group">
+                    <label for="text-color">Text Color:</label>
+                    <input type="color" id="text-color" value="#000000" title="Change text color">
+                </div>
+
+                <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
                     <select id="font-size">
                         <option value="12">12px</option>
@@ -385,7 +390,7 @@
                 </div>
                 <div class="feature">
                     <h3>🎨 Rich Text Formatting</h3>
-                    <p>Bold, Italic, Underline, Strikethrough, Superscript, Subscript with keyboard shortcuts</p>
+                    <p>Bold, Italic, Underline, Strikethrough, Superscript, Subscript, and Text Color</p>
                 </div>
                 <div class="feature">
                     <h3>🧪 100% Synthetic Testing</h3>
@@ -434,7 +439,7 @@ Click anywhere to start typing. Try changing the font and size from the toolbar 
 This editor is built entirely on HTML5 Canvas, providing native-like performance and feel. It features:
 
 • Full keyboard support (typing, arrows, backspace, enter)
-• Rich text formatting: Bold, Italic, Underline, Strikethrough, Superscript, Subscript
+• Rich text formatting: Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Text Color
 • Precise click-to-position cursor placement
 • Text selection and manipulation
 • Drag and drop to move selected text
@@ -459,6 +464,7 @@ Type away and explore the features...`;
         const strikethroughBtn = document.getElementById('strikethrough-btn');
         const superscriptBtn = document.getElementById('superscript-btn');
         const subscriptBtn = document.getElementById('subscript-btn');
+        const textColorInput = document.getElementById('text-color');
         const fontSizeSelect = document.getElementById('font-size');
         const fontFamilySelect = document.getElementById('font-family');
 
@@ -472,6 +478,7 @@ Type away and explore the features...`;
             const fontAtCursor = editor.getFontAtCursor();
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
+            textColorInput.value = fontAtCursor.color || '#000000';
 
             // Update formatting button active states
             boldBtn.classList.toggle('active', fontAtCursor.weight === 'bold');
@@ -526,6 +533,13 @@ Type away and explore the features...`;
 
         subscriptBtn.addEventListener('click', () => {
             editor.toggleSubscript();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Text color control
+        textColorInput.addEventListener('input', (e) => {
+            editor.setTextColor(e.target.value);
             canvas.focus();
             updateToolbar();
         });

@@ -3,7 +3,8 @@
  */
 export class FontProperties {
     constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
-                underline = false, strikethrough = false, superscript = false, subscript = false) {
+                underline = false, strikethrough = false, superscript = false, subscript = false,
+                color = '#000000') {
         this.size = size;
         this.family = family;
         this.weight = weight;
@@ -12,6 +13,7 @@ export class FontProperties {
         this.strikethrough = strikethrough;
         this.superscript = superscript;
         this.subscript = subscript;
+        this.color = color;
     }
 
     doPropertiesMatch(other) {
@@ -22,12 +24,14 @@ export class FontProperties {
                this.underline === other.underline &&
                this.strikethrough === other.strikethrough &&
                this.superscript === other.superscript &&
-               this.subscript === other.subscript;
+               this.subscript === other.subscript &&
+               this.color === other.color;
     }
 
     clone() {
         return new FontProperties(this.size, this.family, this.weight, this.style,
-                                   this.underline, this.strikethrough, this.superscript, this.subscript);
+                                   this.underline, this.strikethrough, this.superscript, this.subscript,
+                                   this.color);
     }
 
     toFontString() {
