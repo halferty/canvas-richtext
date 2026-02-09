@@ -428,6 +428,7 @@
 
                 <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
+                    <button id="decrease-font-btn" class="format-btn" title="Decrease font size">-</button>
                     <select id="font-size">
                         <option value="12">12px</option>
                         <option value="14">14px</option>
@@ -438,6 +439,7 @@
                         <option value="32">32px</option>
                         <option value="48">48px</option>
                     </select>
+                    <button id="increase-font-btn" class="format-btn" title="Increase font size">+</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -452,6 +454,18 @@
                     </select>
                 </div>
 
+                <div class="toolbar-group">
+                    <label for="line-spacing">Line Spacing:</label>
+                    <select id="line-spacing">
+                        <option value="1.0">1.0</option>
+                        <option value="1.15">1.15</option>
+                        <option value="1.5" selected>1.5</option>
+                        <option value="2.0">2.0</option>
+                        <option value="2.5">2.5</option>
+                    </select>
+                </div>
+
+                <button id="clear-formatting-btn" class="format-btn" title="Clear formatting">Clear Format</button>
                 <button id="clear-btn">Clear</button>
                 <button id="sample-text-btn">Load Sample Text</button>
             </div>
@@ -511,12 +525,23 @@
                     <div class="menu-item" data-action="subscript">
                         <span class="menu-label">Subscript</span>
                     </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" data-action="clear-formatting">
+                        <span class="menu-label">Clear Formatting</span>
+                    </div>
                 </div>
             </div>
             <div class="menu-item menu-item-submenu" data-action="font-size">
                 <span class="menu-label">Font Size</span>
                 <span class="menu-arrow">▶</span>
                 <div class="submenu">
+                    <div class="menu-item" data-action="increase-font-size">
+                        <span class="menu-label">Increase</span>
+                    </div>
+                    <div class="menu-item" data-action="decrease-font-size">
+                        <span class="menu-label">Decrease</span>
+                    </div>
+                    <div class="menu-separator"></div>
                     <div class="menu-item" data-action="font-size-12" data-value="12">
                         <span class="menu-label">12px</span>
                     </div>
@@ -577,6 +602,27 @@
                     </div>
                     <div class="menu-item" data-action="align-center">
                         <span class="menu-label">Align Center</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-item menu-item-submenu" data-action="line-spacing">
+                <span class="menu-label">Line Spacing</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="line-spacing-1.0" data-value="1.0">
+                        <span class="menu-label">1.0</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-1.15" data-value="1.15">
+                        <span class="menu-label">1.15</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-1.5" data-value="1.5">
+                        <span class="menu-label">1.5</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-2.0" data-value="2.0">
+                        <span class="menu-label">2.0</span>
+                    </div>
+                    <div class="menu-item" data-action="line-spacing-2.5" data-value="2.5">
+                        <span class="menu-label">2.5</span>
                     </div>
                 </div>
             </div>
@@ -711,7 +757,11 @@ Type away and explore the features...`;
         const alignCenterBtn = document.getElementById('align-center-btn');
         const textColorInput = document.getElementById('text-color');
         const fontSizeSelect = document.getElementById('font-size');
+        const increaseFontBtn = document.getElementById('increase-font-btn');
+        const decreaseFontBtn = document.getElementById('decrease-font-btn');
         const fontFamilySelect = document.getElementById('font-family');
+        const lineSpacingSelect = document.getElementById('line-spacing');
+        const clearFormattingBtn = document.getElementById('clear-formatting-btn');
 
         // Function to update toolbar state
         function updateToolbar() {
@@ -724,6 +774,7 @@ Type away and explore the features...`;
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
             textColorInput.value = fontAtCursor.color || '#000000';
+            lineSpacingSelect.value = editor.getLineSpacing();
 
             // Update formatting button active states
             boldBtn.classList.toggle('active', fontAtCursor.weight === 'bold');
@@ -815,9 +866,33 @@ Type away and explore the features...`;
             updateToolbar();
         });
 
+        increaseFontBtn.addEventListener('click', () => {
+            editor.increaseFontSize();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        decreaseFontBtn.addEventListener('click', () => {
+            editor.decreaseFontSize();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
         fontFamilySelect.addEventListener('change', (e) => {
             editor.setFontFamily(e.target.value);
             canvas.focus({ preventScroll: true }); // Refocus canvas after dropdown interaction
+            updateToolbar();
+        });
+
+        lineSpacingSelect.addEventListener('change', (e) => {
+            editor.setLineSpacing(parseFloat(e.target.value));
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        clearFormattingBtn.addEventListener('click', () => {
+            editor.clearFormatting();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
@@ -971,6 +1046,15 @@ Type away and explore the features...`;
                 case 'align-center':
                     editor.setAlignment('center');
                     break;
+                case 'increase-font-size':
+                    editor.increaseFontSize();
+                    break;
+                case 'decrease-font-size':
+                    editor.decreaseFontSize();
+                    break;
+                case 'clear-formatting':
+                    editor.clearFormatting();
+                    break;
                 case 'select-all':
                     editor.selectAll();
                     break;
@@ -984,6 +1068,11 @@ Type away and explore the features...`;
             // Handle font family changes
             if (action.startsWith('font-family-') && value) {
                 editor.setFontFamily(value);
+            }
+
+            // Handle line spacing changes
+            if (action.startsWith('line-spacing-') && value) {
+                editor.setLineSpacing(parseFloat(value));
             }
 
             // Close menu and refocus canvas

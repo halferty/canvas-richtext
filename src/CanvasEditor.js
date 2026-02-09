@@ -977,8 +977,72 @@ export class CanvasEditor {
                 pos += 1;
             }
         }
-        
+
         this.chain.recalc();
+    }
+
+    increaseFontSize() {
+        const currentSize = this.chain.currentFontProperties.size;
+        const newSize = Math.min(currentSize + 2, 72); // Max 72px
+        this.setFontSize(newSize);
+    }
+
+    decreaseFontSize() {
+        const currentSize = this.chain.currentFontProperties.size;
+        const newSize = Math.max(currentSize - 2, 8); // Min 8px
+        this.setFontSize(newSize);
+    }
+
+    clearFormatting() {
+        if (!this.chain.hasSelection()) {
+            return;
+        }
+
+        this.takeSnapshot();
+
+        const items = this.chain.getItems();
+        let pos = 0;
+        const selStart = this.chain.selectionStart;
+        const selEnd = this.chain.selectionEnd;
+
+        for (let item of items) {
+            if (item instanceof TextLink) {
+                const itemStart = pos;
+                const itemEnd = pos + item.text.length;
+
+                // If this item overlaps with the selection, reset to default formatting
+                if (itemEnd > selStart && itemStart < selEnd) {
+                    const defaultProps = this.defaultFontProperties;
+                    item.intrinsic.fontProperties = new FontProperties(
+                        defaultProps.size,
+                        defaultProps.family,
+                        'normal', // weight
+                        'normal', // style
+                        false,    // underline
+                        false,    // strikethrough
+                        false,    // superscript
+                        false,    // subscript
+                        '#000000' // color
+                    );
+                }
+                pos += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                pos += 1;
+            }
+        }
+
+        this.chain.recalc();
+        this.render();
+    }
+
+    setLineSpacing(spacing) {
+        this.chain.LINE_SPACING_MULT = spacing;
+        this.chain.recalc();
+        this.render();
+    }
+
+    getLineSpacing() {
+        return this.chain.LINE_SPACING_MULT;
     }
 
     // Text formatting methods
