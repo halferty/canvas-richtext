@@ -111,6 +111,58 @@
             transform: translateY(0);
         }
 
+        .toolbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .toolbar button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        #undo-btn,
+        #redo-btn {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            font-weight: 600;
+        }
+
+        #undo-btn:hover:not(:disabled),
+        #redo-btn:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #764ba2;
+            color: #764ba2;
+        }
+
+        .format-btn {
+            background: white;
+            color: #495057;
+            border: 2px solid #ced4da;
+            font-weight: 600;
+            min-width: 36px;
+        }
+
+        .format-btn:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .format-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .format-btn.active:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
         .canvas-container {
             padding: 2rem;
             background: white;
@@ -227,6 +279,118 @@
                 padding: 1rem;
             }
         }
+
+        /* Context Menu Styles */
+        .context-menu {
+            position: absolute;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            min-width: 200px;
+            padding: 4px 0;
+            z-index: 10000;
+            font-size: 0.9rem;
+            animation: menuFadeIn 0.15s ease-out;
+        }
+
+        @keyframes menuFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            transition: background-color 0.1s;
+            color: #333;
+        }
+
+        .menu-item:hover {
+            background-color: #f8f9ff;
+            color: #667eea;
+        }
+
+        .menu-item.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .menu-item.disabled:hover {
+            background-color: transparent;
+            color: #333;
+        }
+
+        .menu-label {
+            flex: 1;
+        }
+
+        .menu-shortcut {
+            margin-left: 24px;
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        .menu-arrow {
+            margin-left: 12px;
+            font-size: 0.7rem;
+            color: #999;
+        }
+
+        .menu-separator {
+            height: 1px;
+            background-color: #e9ecef;
+            margin: 4px 0;
+        }
+
+        .menu-item-submenu {
+            position: relative;
+        }
+
+        .submenu {
+            position: absolute;
+            left: 100%;
+            top: -4px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            min-width: 180px;
+            padding: 4px 0;
+            display: none;
+            animation: submenuFadeIn 0.15s ease-out;
+        }
+
+        @keyframes submenuFadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .menu-item-submenu:hover > .submenu {
+            display: block;
+        }
+
+        /* Adjust submenu position if it would go off-screen */
+        .submenu.submenu-left {
+            left: auto;
+            right: 100%;
+        }
     </style>
 </head>
 <body>
@@ -238,6 +402,30 @@
     <div class="container">
         <div class="editor-wrapper">
             <div class="toolbar">
+                <div class="toolbar-group">
+                    <button id="undo-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
+                    <button id="redo-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
+                </div>
+
+                <div class="toolbar-group">
+                    <button id="bold-btn" class="format-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
+                    <button id="italic-btn" class="format-btn" title="Italic (Ctrl+I)"><em>I</em></button>
+                    <button id="underline-btn" class="format-btn" title="Underline (Ctrl+U)"><u>U</u></button>
+                    <button id="strikethrough-btn" class="format-btn" title="Strikethrough"><s>S</s></button>
+                    <button id="superscript-btn" class="format-btn" title="Superscript">x²</button>
+                    <button id="subscript-btn" class="format-btn" title="Subscript">x₂</button>
+                </div>
+
+                <div class="toolbar-group">
+                    <button id="align-left-btn" class="format-btn" title="Align Left">⬅</button>
+                    <button id="align-center-btn" class="format-btn" title="Align Center">↔</button>
+                </div>
+
+                <div class="toolbar-group">
+                    <label for="text-color">Text Color:</label>
+                    <input type="color" id="text-color" value="#000000" title="Change text color">
+                </div>
+
                 <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
                     <select id="font-size">
@@ -270,6 +458,132 @@
 
             <div class="canvas-container">
                 <canvas id="editor-canvas" width="1000" height="600"></canvas>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div id="context-menu" class="context-menu" style="display: none;">
+            <div class="menu-item" data-action="undo">
+                <span class="menu-label">Undo</span>
+                <span class="menu-shortcut">Ctrl+Z</span>
+            </div>
+            <div class="menu-item" data-action="redo">
+                <span class="menu-label">Redo</span>
+                <span class="menu-shortcut">Ctrl+Y</span>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item" data-action="cut">
+                <span class="menu-label">Cut</span>
+                <span class="menu-shortcut">Ctrl+X</span>
+            </div>
+            <div class="menu-item" data-action="copy">
+                <span class="menu-label">Copy</span>
+                <span class="menu-shortcut">Ctrl+C</span>
+            </div>
+            <div class="menu-item" data-action="paste">
+                <span class="menu-label">Paste</span>
+                <span class="menu-shortcut">Ctrl+V</span>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item menu-item-submenu" data-action="format">
+                <span class="menu-label">Format</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="bold">
+                        <span class="menu-label"><strong>Bold</strong></span>
+                        <span class="menu-shortcut">Ctrl+B</span>
+                    </div>
+                    <div class="menu-item" data-action="italic">
+                        <span class="menu-label"><em>Italic</em></span>
+                        <span class="menu-shortcut">Ctrl+I</span>
+                    </div>
+                    <div class="menu-item" data-action="underline">
+                        <span class="menu-label"><u>Underline</u></span>
+                        <span class="menu-shortcut">Ctrl+U</span>
+                    </div>
+                    <div class="menu-item" data-action="strikethrough">
+                        <span class="menu-label"><s>Strikethrough</s></span>
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-item" data-action="superscript">
+                        <span class="menu-label">Superscript</span>
+                    </div>
+                    <div class="menu-item" data-action="subscript">
+                        <span class="menu-label">Subscript</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-item menu-item-submenu" data-action="font-size">
+                <span class="menu-label">Font Size</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="font-size-12" data-value="12">
+                        <span class="menu-label">12px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-14" data-value="14">
+                        <span class="menu-label">14px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-16" data-value="16">
+                        <span class="menu-label">16px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-18" data-value="18">
+                        <span class="menu-label">18px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-20" data-value="20">
+                        <span class="menu-label">20px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-24" data-value="24">
+                        <span class="menu-label">24px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-32" data-value="32">
+                        <span class="menu-label">32px</span>
+                    </div>
+                    <div class="menu-item" data-action="font-size-48" data-value="48">
+                        <span class="menu-label">48px</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-item menu-item-submenu" data-action="font-family">
+                <span class="menu-label">Font Family</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="font-family-arial" data-value="Arial">
+                        <span class="menu-label" style="font-family: Arial;">Arial</span>
+                    </div>
+                    <div class="menu-item" data-action="font-family-georgia" data-value="Georgia">
+                        <span class="menu-label" style="font-family: Georgia;">Georgia</span>
+                    </div>
+                    <div class="menu-item" data-action="font-family-times" data-value="Times New Roman">
+                        <span class="menu-label" style="font-family: Times New Roman;">Times New Roman</span>
+                    </div>
+                    <div class="menu-item" data-action="font-family-courier" data-value="Courier New">
+                        <span class="menu-label" style="font-family: Courier New;">Courier New</span>
+                    </div>
+                    <div class="menu-item" data-action="font-family-verdana" data-value="Verdana">
+                        <span class="menu-label" style="font-family: Verdana;">Verdana</span>
+                    </div>
+                    <div class="menu-item" data-action="font-family-comic" data-value="Comic Sans MS">
+                        <span class="menu-label" style="font-family: Comic Sans MS;">Comic Sans MS</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item menu-item-submenu" data-action="alignment">
+                <span class="menu-label">Alignment</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="align-left">
+                        <span class="menu-label">Align Left</span>
+                    </div>
+                    <div class="menu-item" data-action="align-center">
+                        <span class="menu-label">Align Center</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-separator"></div>
+            <div class="menu-item" data-action="select-all">
+                <span class="menu-label">Select All</span>
+                <span class="menu-shortcut">Ctrl+A</span>
             </div>
         </div>
 
@@ -307,7 +621,7 @@
                 </div>
                 <div class="feature">
                     <h3>📝 Text Selection & Clipboard</h3>
-                    <p>Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V), and Select All (Ctrl+A)</p>
+                    <p>Copy (Ctrl+C), Cut (Ctrl+X), Paste (Ctrl+V), Select All (Ctrl+A), and drag & drop</p>
                 </div>
                 <div class="feature">
                     <h3>↩️ Undo/Redo</h3>
@@ -318,8 +632,8 @@
                     <p>Automatic text wrapping with virtual newlines for long content</p>
                 </div>
                 <div class="feature">
-                    <h3>🎨 Font Customization</h3>
-                    <p>Multiple font sizes and families with live preview</p>
+                    <h3>🎨 Rich Text Formatting</h3>
+                    <p>Bold, Italic, Underline, Strikethrough, Superscript, Subscript, and Text Color</p>
                 </div>
                 <div class="feature">
                     <h3>🧪 100% Synthetic Testing</h3>
@@ -336,6 +650,9 @@
                     <div><strong>Ctrl+C</strong> - Copy</div>
                     <div><strong>Ctrl+X</strong> - Cut</div>
                     <div><strong>Ctrl+V</strong> - Paste</div>
+                    <div><strong>Ctrl+B</strong> - Bold</div>
+                    <div><strong>Ctrl+I</strong> - Italic</div>
+                    <div><strong>Ctrl+U</strong> - Underline</div>
                 </div>
             </div>
 
@@ -365,8 +682,10 @@ Click anywhere to start typing. Try changing the font and size from the toolbar 
 This editor is built entirely on HTML5 Canvas, providing native-like performance and feel. It features:
 
 • Full keyboard support (typing, arrows, backspace, enter)
+• Rich text formatting: Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Text Color
 • Precise click-to-position cursor placement
 • Text selection and manipulation
+• Drag and drop to move selected text
 • Automatic word wrapping
 • Multiple font sizes and families
 • Undo/Redo (Ctrl+Z, Ctrl+Y)
@@ -379,26 +698,316 @@ Type away and explore the features...`;
 
         editor.setText(welcomeText);
 
-        // Toolbar controls
-        document.getElementById('font-size').addEventListener('change', (e) => {
-            editor.setFontSize(parseInt(e.target.value));
+        // Get toolbar elements
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        const boldBtn = document.getElementById('bold-btn');
+        const italicBtn = document.getElementById('italic-btn');
+        const underlineBtn = document.getElementById('underline-btn');
+        const strikethroughBtn = document.getElementById('strikethrough-btn');
+        const superscriptBtn = document.getElementById('superscript-btn');
+        const subscriptBtn = document.getElementById('subscript-btn');
+        const alignLeftBtn = document.getElementById('align-left-btn');
+        const alignCenterBtn = document.getElementById('align-center-btn');
+        const textColorInput = document.getElementById('text-color');
+        const fontSizeSelect = document.getElementById('font-size');
+        const fontFamilySelect = document.getElementById('font-family');
+
+        // Function to update toolbar state
+        function updateToolbar() {
+            // Update undo/redo button states
+            undoBtn.disabled = !editor.canUndo();
+            redoBtn.disabled = !editor.canRedo();
+
+            // Update font dropdowns to reflect current cursor position
+            const fontAtCursor = editor.getFontAtCursor();
+            fontSizeSelect.value = fontAtCursor.size;
+            fontFamilySelect.value = fontAtCursor.family;
+            textColorInput.value = fontAtCursor.color || '#000000';
+
+            // Update formatting button active states
+            boldBtn.classList.toggle('active', fontAtCursor.weight === 'bold');
+            italicBtn.classList.toggle('active', fontAtCursor.style === 'italic');
+            underlineBtn.classList.toggle('active', fontAtCursor.underline);
+            strikethroughBtn.classList.toggle('active', fontAtCursor.strikethrough);
+            superscriptBtn.classList.toggle('active', fontAtCursor.superscript);
+            subscriptBtn.classList.toggle('active', fontAtCursor.subscript);
+
+            // Update alignment button active states
+            const paragraphIndex = editor.getCurrentParagraphIndex();
+            const currentAlignment = editor.paragraphAlignments.get(paragraphIndex) || 'left';
+            alignLeftBtn.classList.toggle('active', currentAlignment === 'left');
+            alignCenterBtn.classList.toggle('active', currentAlignment === 'center');
+        }
+
+        // Undo/Redo buttons
+        undoBtn.addEventListener('click', () => {
+            editor.undo();
+            updateToolbar();
         });
 
-        document.getElementById('font-family').addEventListener('change', (e) => {
+        redoBtn.addEventListener('click', () => {
+            editor.redo();
+            updateToolbar();
+        });
+
+        // Formatting buttons
+        boldBtn.addEventListener('click', () => {
+            editor.toggleBold();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        italicBtn.addEventListener('click', () => {
+            editor.toggleItalic();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        underlineBtn.addEventListener('click', () => {
+            editor.toggleUnderline();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        strikethroughBtn.addEventListener('click', () => {
+            editor.toggleStrikethrough();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        superscriptBtn.addEventListener('click', () => {
+            editor.toggleSuperscript();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        subscriptBtn.addEventListener('click', () => {
+            editor.toggleSubscript();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Alignment buttons
+        alignLeftBtn.addEventListener('click', () => {
+            editor.setAlignment('left');
+            canvas.focus();
+            updateToolbar();
+        });
+
+        alignCenterBtn.addEventListener('click', () => {
+            editor.setAlignment('center');
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Text color control
+        textColorInput.addEventListener('input', (e) => {
+            editor.setTextColor(e.target.value);
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Font controls
+        fontSizeSelect.addEventListener('change', (e) => {
+            editor.setFontSize(parseInt(e.target.value));
+            canvas.focus(); // Refocus canvas after dropdown interaction
+            updateToolbar();
+        });
+
+        fontFamilySelect.addEventListener('change', (e) => {
             editor.setFontFamily(e.target.value);
+            canvas.focus(); // Refocus canvas after dropdown interaction
+            updateToolbar();
         });
 
         document.getElementById('clear-btn').addEventListener('click', () => {
             editor.clear();
+            updateToolbar();
         });
 
         document.getElementById('sample-text-btn').addEventListener('click', () => {
             editor.setText(welcomeText);
+            updateToolbar();
         });
+
+        // Update toolbar when canvas receives input
+        canvas.addEventListener('click', () => {
+            setTimeout(updateToolbar, 10); // Small delay to let cursor position update
+        });
+
+        canvas.addEventListener('keyup', () => {
+            updateToolbar();
+        });
+
+        // Initial toolbar update
+        updateToolbar();
 
         // Log editor state to console for debugging
         console.log('Canvas RichText Editor initialized!');
         console.log('Editor state:', editor.dumpState());
+
+        // Context Menu
+        const contextMenu = document.getElementById('context-menu');
+        let contextMenuVisible = false;
+
+        // Show context menu on right-click
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+
+            // Position the menu at the cursor
+            const x = e.pageX;
+            const y = e.pageY;
+
+            // Check if menu would go off-screen
+            const menuWidth = 200;
+            const menuHeight = 400; // Approximate
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            let menuX = x;
+            let menuY = y;
+
+            // Adjust horizontal position if needed
+            if (x + menuWidth > windowWidth) {
+                menuX = windowWidth - menuWidth - 10;
+            }
+
+            // Adjust vertical position if needed
+            if (y + menuHeight > windowHeight) {
+                menuY = windowHeight - menuHeight - 10;
+            }
+
+            contextMenu.style.left = menuX + 'px';
+            contextMenu.style.top = menuY + 'px';
+            contextMenu.style.display = 'block';
+            contextMenuVisible = true;
+
+            // Update menu item states
+            updateContextMenuState();
+        });
+
+        // Hide context menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (contextMenuVisible && !contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+                contextMenuVisible = false;
+            }
+        });
+
+        // Hide context menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && contextMenuVisible) {
+                contextMenu.style.display = 'none';
+                contextMenuVisible = false;
+            }
+        });
+
+        // Update context menu item states based on editor state
+        function updateContextMenuState() {
+            const undoItem = contextMenu.querySelector('[data-action="undo"]');
+            const redoItem = contextMenu.querySelector('[data-action="redo"]');
+            const cutItem = contextMenu.querySelector('[data-action="cut"]');
+            const copyItem = contextMenu.querySelector('[data-action="copy"]');
+
+            // Disable undo/redo if not available
+            undoItem.classList.toggle('disabled', !editor.canUndo());
+            redoItem.classList.toggle('disabled', !editor.canRedo());
+
+            // Disable cut/copy if no selection
+            const hasSelection = editor.chain && editor.chain.hasSelection && editor.chain.hasSelection();
+            cutItem.classList.toggle('disabled', !hasSelection);
+            copyItem.classList.toggle('disabled', !hasSelection);
+        }
+
+        // Handle context menu item clicks
+        contextMenu.addEventListener('click', (e) => {
+            const menuItem = e.target.closest('.menu-item');
+            if (!menuItem || menuItem.classList.contains('disabled') || menuItem.classList.contains('menu-item-submenu')) {
+                return;
+            }
+
+            const action = menuItem.dataset.action;
+            const value = menuItem.dataset.value;
+
+            // Execute the action
+            switch(action) {
+                case 'undo':
+                    editor.undo();
+                    break;
+                case 'redo':
+                    editor.redo();
+                    break;
+                case 'cut':
+                    editor.cut();
+                    break;
+                case 'copy':
+                    editor.copy();
+                    break;
+                case 'paste':
+                    editor.paste();
+                    break;
+                case 'bold':
+                    editor.toggleBold();
+                    break;
+                case 'italic':
+                    editor.toggleItalic();
+                    break;
+                case 'underline':
+                    editor.toggleUnderline();
+                    break;
+                case 'strikethrough':
+                    editor.toggleStrikethrough();
+                    break;
+                case 'superscript':
+                    editor.toggleSuperscript();
+                    break;
+                case 'subscript':
+                    editor.toggleSubscript();
+                    break;
+                case 'align-left':
+                    editor.setAlignment('left');
+                    break;
+                case 'align-center':
+                    editor.setAlignment('center');
+                    break;
+                case 'select-all':
+                    editor.selectAll();
+                    break;
+            }
+
+            // Handle font size changes
+            if (action.startsWith('font-size-') && value) {
+                editor.setFontSize(parseInt(value));
+            }
+
+            // Handle font family changes
+            if (action.startsWith('font-family-') && value) {
+                editor.setFontFamily(value);
+            }
+
+            // Close menu and refocus canvas
+            contextMenu.style.display = 'none';
+            contextMenuVisible = false;
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Adjust submenu position if it would go off-screen
+        contextMenu.addEventListener('mouseenter', (e) => {
+            const submenus = contextMenu.querySelectorAll('.submenu');
+            submenus.forEach(submenu => {
+                const rect = submenu.getBoundingClientRect();
+                const windowWidth = window.innerWidth;
+
+                // If submenu goes off right edge, show it on the left side
+                if (rect.right > windowWidth) {
+                    submenu.classList.add('submenu-left');
+                } else {
+                    submenu.classList.remove('submenu-left');
+                }
+            });
+        }, true);
     </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import { Chain } from './Chain.js';
 import { FontProperties } from './FontProperties.js';
-import { TextLink, CursorLink, NewlineLink } from './ChainLink.js';
+import { TextLink, CursorLink, NewlineLink, VirtualNewlineLink } from './ChainLink.js';
 
 /**
  * CanvasEditor - Main editor class that manages the canvas, rendering, and user interactions
@@ -47,7 +47,13 @@ export class CanvasEditor {
         // Selection state
         this.isMouseDown = false;
         this.mouseDownPos = null;
-        
+
+        // Drag and drop state
+        this.isDragging = false;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.draggedText = '';
+
         // Click tracking for double/triple click
         this.lastClickTime = 0;
         this.clickCount = 0;
@@ -57,6 +63,9 @@ export class CanvasEditor {
         this.history = [];
         this.historyIndex = -1;
         this.maxHistorySize = 100;
+
+        // Paragraph alignment (keyed by paragraph index)
+        this.paragraphAlignments = new Map();
 
         // Take initial snapshot
         this.takeSnapshot();
@@ -75,19 +84,41 @@ export class CanvasEditor {
         this.boundHandleMouseDown = (e) => this.handleMouseDown(e);
         this.boundHandleMouseMove = (e) => this.handleMouseMove(e);
         this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
+        this.boundHandleMouseOver = (e) => this.handleMouseOver(e);
 
         // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
         if (typeof this.canvas.addEventListener === 'function') {
             // Keyboard events
             this.canvas.addEventListener('keydown', this.boundHandleKeyDown);
-            
+
             // Mouse events
             this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
             this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
             this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
+            this.canvas.addEventListener('mouseover', this.boundHandleMouseOver);
 
-            // Make canvas focusable
+            // Make canvas focusable and set initial cursor
             this.canvas.tabIndex = 1;
+            if (this.canvas.style) {
+                this.canvas.style.cursor = 'text';
+            }
+        }
+    }
+
+    handleMouseOver(e) {
+        // Update cursor style when hovering over selection
+        if (!this.canvas.style) return; // No style property in test environment
+        if (this.isDragging) return; // Keep grabbing cursor while dragging
+
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding;
+
+        const pos = this.getCharacterAtPosition(x, y);
+        if (this.isPositionInSelection(pos)) {
+            this.canvas.style.cursor = 'grab';
+        } else {
+            this.canvas.style.cursor = 'text';
         }
     }
 
@@ -137,6 +168,28 @@ export class CanvasEditor {
         if (ctrl && key === 'v') {
             e.preventDefault();
             this.paste();
+            this.resetCursorBlink();
+            return;
+        }
+
+        // Text formatting shortcuts
+        if (ctrl && key === 'b') {
+            e.preventDefault();
+            this.toggleBold();
+            this.resetCursorBlink();
+            return;
+        }
+
+        if (ctrl && key === 'i') {
+            e.preventDefault();
+            this.toggleItalic();
+            this.resetCursorBlink();
+            return;
+        }
+
+        if (ctrl && key === 'u') {
+            e.preventDefault();
+            this.toggleUnderline();
             this.resetCursorBlink();
             return;
         }
@@ -263,6 +316,32 @@ export class CanvasEditor {
         }
     }
 
+    // Get font properties at cursor position
+    getFontAtCursor() {
+        const items = this.chain.getItems();
+        const cursorIdx = this.chain.cursorIdx();
+
+        // Look backwards from cursor to find the most recent TextLink
+        for (let i = cursorIdx - 1; i >= 0; i--) {
+            if (items[i] instanceof TextLink) {
+                return {
+                    size: items[i].intrinsic.fontProperties.size,
+                    family: items[i].intrinsic.fontProperties.family,
+                    weight: items[i].intrinsic.fontProperties.weight,
+                    style: items[i].intrinsic.fontProperties.style
+                };
+            }
+        }
+
+        // No text before cursor, return current default
+        return {
+            size: this.chain.currentFontProperties.size,
+            family: this.chain.currentFontProperties.family,
+            weight: this.chain.currentFontProperties.weight,
+            style: this.chain.currentFontProperties.style
+        };
+    }
+
     deleteSelection() {
         if (!this.chain.hasSelection()) return;
 
@@ -330,7 +409,7 @@ export class CanvasEditor {
             this.clickCount = 1;
         }
         this.lastClickTime = now;
-        
+
         // Reset click count after delay
         if (this.clickResetTimeout) {
             clearTimeout(this.clickResetTimeout);
@@ -338,15 +417,18 @@ export class CanvasEditor {
         this.clickResetTimeout = setTimeout(() => {
             this.clickCount = 0;
         }, 500);
-        
+
         this.isMouseDown = true;
         this.mouseDownX = x;
         this.mouseDownY = y;
-        
+
         // Store the character position where mouse went down
         const startPos = this.getCharacterAtPosition(x, y);
         this.mouseDownCharPos = startPos;
-        
+
+        // Check if clicking within existing selection (for drag and drop)
+        const clickedInSelection = this.isPositionInSelection(startPos);
+
         // Handle multi-clicks
         if (this.clickCount === 2) {
             // Double-click: select word (don't move cursor first!)
@@ -356,13 +438,19 @@ export class CanvasEditor {
             // Triple-click: select line (don't move cursor first!)
             this.chain.clearSelection();
             this.selectLine(startPos);
+        } else if (clickedInSelection && this.chain.hasSelection()) {
+            // Single click within selection: prepare for potential drag
+            // Don't clear selection yet - wait to see if user drags
+            this.dragStartX = x;
+            this.dragStartY = y;
+            this.draggedText = this.chain.getSelectedText();
         } else {
-            // Single click: clear selection and position cursor
+            // Single click outside selection: clear selection and position cursor
             this.chain.clearSelection();
             this.chain.clicked(x, y);
             console.log('Single click - cursor repositioned');
         }
-        
+
         this.render();
 
         // Reset cursor blink to stay visible for full cycle
@@ -373,14 +461,35 @@ export class CanvasEditor {
     }
 
     handleMouseMove(e) {
-        if (!this.isMouseDown || !this.mouseDownCharPos) return;
+        if (!this.isMouseDown) return;
 
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding;
 
-        // Require minimum drag distance to start selection (prevent accidental selection on click)
+        // Calculate drag distance
         const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
+
+        // Check if we should start dragging selected text
+        if (this.draggedText && !this.isDragging && dragDistance >= 5) {
+            // Start drag operation
+            this.isDragging = true;
+            if (this.canvas.style) {
+                this.canvas.style.cursor = 'grabbing';
+            }
+            console.log('Started dragging selected text');
+            return;
+        }
+
+        // If we're dragging, just update cursor (actual drop happens in mouseup)
+        if (this.isDragging) {
+            return;
+        }
+
+        // Normal selection behavior (not dragging)
+        if (!this.mouseDownCharPos) return;
+
+        // Require minimum drag distance to start selection (prevent accidental selection on click)
         if (dragDistance < 3) return; // 3 pixel threshold
 
         // Find character position for current mouse position
@@ -396,8 +505,78 @@ export class CanvasEditor {
     }
 
     handleMouseUp(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding;
+
+        // Handle drag and drop completion
+        if (this.isDragging && this.draggedText) {
+            console.log('Completing drag and drop operation');
+
+            // Find drop position
+            const dropPos = this.getCharacterAtPosition(x, y);
+
+            if (dropPos) {
+                const dropCharIdx = this.chain.getCharPosition(dropPos.itemIdx, dropPos.charOffset);
+
+                // Only perform move if dropping outside the current selection
+                if (dropCharIdx < this.chain.selectionStart || dropCharIdx > this.chain.selectionEnd) {
+                    this.takeSnapshot();
+
+                    // Get the text being moved
+                    const movedText = this.draggedText;
+
+                    // Delete text from original position
+                    this.deleteSelection();
+
+                    // Adjust drop position if it was after the deleted text
+                    let adjustedDropCharIdx = dropCharIdx;
+                    if (dropCharIdx > this.chain.selectionEnd) {
+                        // Drop was after selection, need to adjust for deleted text
+                        adjustedDropCharIdx -= (this.chain.selectionEnd - this.chain.selectionStart);
+                    }
+
+                    // Convert adjusted character index back to item/offset position
+                    const finalDropPos = this.chain.getItemFromCharPosition(adjustedDropCharIdx);
+
+                    // Move cursor to drop position
+                    const cursorIdx = this.chain.cursorIdx();
+                    this.chain.items.splice(cursorIdx, 1);
+                    this.chain.items.splice(finalDropPos.itemIdx, 0, new CursorLink());
+                    this.chain.recalc();
+
+                    // Insert the moved text at cursor position
+                    for (let char of movedText) {
+                        if (char === '\n') {
+                            this.chain.enterPressed();
+                        } else {
+                            this.chain.printableKeyPressed(char);
+                        }
+                    }
+
+                    this.render();
+                }
+            }
+
+            // Reset drag state
+            this.isDragging = false;
+            this.draggedText = '';
+            if (this.canvas.style) {
+                this.canvas.style.cursor = 'text';
+            }
+        }
+
         this.isMouseDown = false;
         this.mouseDownCharPos = null;
+        this.draggedText = '';
+    }
+
+    // Helper to check if a character position is within current selection
+    isPositionInSelection(pos) {
+        if (!pos || !this.chain.hasSelection()) return false;
+
+        const posCharIdx = this.chain.getCharPosition(pos.itemIdx, pos.charOffset);
+        return posCharIdx >= this.chain.selectionStart && posCharIdx < this.chain.selectionEnd;
     }
 
     // Helper to find character position at x, y coordinates
@@ -600,6 +779,9 @@ export class CanvasEditor {
     }
 
     render() {
+        // Apply alignment adjustments before rendering
+        this.adjustForAlignment();
+
         // Clear canvas
         this.ctx.fillStyle = this.options.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -666,13 +848,54 @@ export class CanvasEditor {
     }
 
     renderTextLink(textLink) {
-        const posX = textLink.getPosX();
-        const posY = textLink.getPosY();
+        let posX = textLink.getPosX();
+        let posY = textLink.getPosY();
         const fontProps = textLink.getFontProperties();
 
-        this.ctx.font = fontProps.toFontString();
-        this.ctx.fillStyle = '#000000';
+        // Apply superscript/subscript offset and size adjustment
+        let fontSize = fontProps.size;
+        if (fontProps.superscript) {
+            fontSize = fontProps.size * 0.7;
+            posY -= fontProps.size * 0.4;
+        } else if (fontProps.subscript) {
+            fontSize = fontProps.size * 0.7;
+            posY += fontProps.size * 0.2;
+        }
+
+        // Create adjusted font string for super/subscript
+        const fontString = fontProps.superscript || fontProps.subscript
+            ? `${fontProps.style} ${fontProps.weight} ${fontSize}px ${fontProps.family}`
+            : fontProps.toFontString();
+
+        this.ctx.font = fontString;
+        this.ctx.fillStyle = fontProps.color || '#000000';
         this.ctx.fillText(textLink.text, posX, posY);
+
+        // Measure text for decoration lines
+        const metrics = this.ctx.measureText(textLink.text);
+        const textWidth = metrics.width;
+
+        // Draw underline
+        if (fontProps.underline) {
+            this.ctx.strokeStyle = fontProps.color || '#000000';
+            this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
+            this.ctx.beginPath();
+            const underlineY = posY + fontSize * 0.1;
+            this.ctx.moveTo(posX, underlineY);
+            this.ctx.lineTo(posX + textWidth, underlineY);
+            this.ctx.stroke();
+        }
+
+        // Draw strikethrough
+        if (fontProps.strikethrough) {
+            this.ctx.strokeStyle = fontProps.color || '#000000';
+            this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
+            this.ctx.beginPath();
+            const strikeY = posY - fontSize * 0.3;
+            this.ctx.moveTo(posX, strikeY);
+            this.ctx.lineTo(posX + textWidth, strikeY);
+            this.ctx.stroke();
+        }
     }
 
     renderCursor(cursor) {
@@ -755,6 +978,201 @@ export class CanvasEditor {
             }
         }
         
+        this.chain.recalc();
+    }
+
+    // Text formatting methods
+    toggleBold() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('weight', (current) => current === 'bold' ? 'normal' : 'bold');
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleBold();
+        }
+    }
+
+    toggleItalic() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('style', (current) => current === 'italic' ? 'normal' : 'italic');
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleItalic();
+        }
+    }
+
+    toggleUnderline() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('underline', (current) => !current);
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleUnderline();
+        }
+    }
+
+    toggleStrikethrough() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('strikethrough', (current) => !current);
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleStrikethrough();
+        }
+    }
+
+    toggleSuperscript() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            // Superscript and subscript are mutually exclusive
+            this.applyFormattingToSelection('subscript', () => false);
+            this.applyFormattingToSelection('superscript', (current) => !current);
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleSuperscript();
+        }
+    }
+
+    toggleSubscript() {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            // Superscript and subscript are mutually exclusive
+            this.applyFormattingToSelection('superscript', () => false);
+            this.applyFormattingToSelection('subscript', (current) => !current);
+            this.render();
+        } else {
+            // Toggle for next typed text
+            this.chain.currentFontProperties.toggleSubscript();
+        }
+    }
+
+    setTextColor(color) {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('color', () => color);
+            this.render();
+        } else {
+            // Set for next typed text
+            this.chain.currentFontProperties.color = color;
+        }
+    }
+
+    // Text alignment methods
+    getCurrentParagraphIndex() {
+        const items = this.chain.getItems();
+        const cursorIdx = this.chain.cursorIdx();
+        let paragraphIndex = 0;
+
+        // Count newlines before cursor to determine paragraph
+        for (let i = 0; i < cursorIdx; i++) {
+            if (items[i] instanceof NewlineLink) {
+                paragraphIndex++;
+            }
+        }
+
+        return paragraphIndex;
+    }
+
+    setAlignment(alignment) {
+        this.takeSnapshot();
+        const paragraphIndex = this.getCurrentParagraphIndex();
+
+        if (alignment === 'left') {
+            // Remove alignment (default is left)
+            this.paragraphAlignments.delete(paragraphIndex);
+        } else {
+            this.paragraphAlignments.set(paragraphIndex, alignment);
+        }
+
+        this.chain.recalc();
+        this.render();
+    }
+
+    toggleCenterAlign() {
+        const paragraphIndex = this.getCurrentParagraphIndex();
+        const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
+
+        if (currentAlign === 'center') {
+            this.setAlignment('left');
+        } else {
+            this.setAlignment('center');
+        }
+    }
+
+    adjustForAlignment() {
+        const items = this.chain.getItems();
+        let currentParagraph = 0;
+        let lineStartIdx = 0;
+
+        for (let i = 0; i <= items.length; i++) {
+            const isLineEnd = i === items.length ||
+                            items[i] instanceof NewlineLink ||
+                            items[i] instanceof VirtualNewlineLink;
+
+            if (isLineEnd) {
+                const alignment = this.paragraphAlignments.get(currentParagraph) || 'left';
+
+                if (alignment === 'center') {
+                    // Calculate line width
+                    let lineWidth = 0;
+                    for (let j = lineStartIdx; j < i; j++) {
+                        if (items[j] instanceof TextLink) {
+                            const text = items[j].text;
+                            const metrics = items[j].measureText(this.ctx, text);
+                            lineWidth += metrics.width;
+                        }
+                    }
+
+                    // Calculate offset to center the line
+                    const offset = Math.max(0, (this.editorWidth - lineWidth) / 2);
+
+                    // Apply offset to all items on this line
+                    for (let j = lineStartIdx; j < i; j++) {
+                        if (items[j].computed && items[j].computed.posX !== undefined) {
+                            items[j].computed.posX += offset;
+                        }
+                    }
+                }
+
+                // Move to next line
+                lineStartIdx = i + 1;
+
+                // Track paragraph boundaries
+                if (i < items.length && items[i] instanceof NewlineLink) {
+                    currentParagraph++;
+                }
+            }
+        }
+    }
+
+    applyFormattingToSelection(property, valueFn) {
+        const items = this.chain.getItems();
+        let pos = 0;
+        const selStart = this.chain.selectionStart;
+        const selEnd = this.chain.selectionEnd;
+
+        for (let item of items) {
+            if (item instanceof TextLink) {
+                const itemStart = pos;
+                const itemEnd = pos + item.text.length;
+
+                // If this item overlaps with the selection, update its property
+                if (itemEnd > selStart && itemStart < selEnd) {
+                    const currentValue = item.intrinsic.fontProperties[property];
+                    item.intrinsic.fontProperties[property] = valueFn(currentValue);
+                }
+                pos += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                pos += 1;
+            }
+        }
+
         this.chain.recalc();
     }
 
@@ -876,6 +1294,14 @@ export class CanvasEditor {
         this.restoreSnapshot(this.history[this.historyIndex]);
     }
 
+    canUndo() {
+        return this.historyIndex > 0;
+    }
+
+    canRedo() {
+        return this.historyIndex < this.history.length - 1;
+    }
+
     resize(width, height) {
         this.canvas.width = width;
         this.canvas.height = height;
@@ -896,6 +1322,7 @@ export class CanvasEditor {
         this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
         this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
         this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
+        this.canvas.removeEventListener('mouseover', this.boundHandleMouseOver);
     }
 
     // Debug method to dump full editor state
