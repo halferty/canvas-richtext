@@ -282,7 +282,7 @@
 
         /* Context Menu Styles */
         .context-menu {
-            position: absolute;
+            position: fixed;
             background: white;
             border: 1px solid #dee2e6;
             border-radius: 8px;
@@ -585,6 +585,8 @@
                 <button id="clear-formatting-btn" class="format-btn" title="Clear formatting">Clear Format</button>
                 <button id="clear-btn">Clear</button>
                 <button id="sample-text-btn">Load Sample Text</button>
+                <button id="find-btn">Find</button>
+                <button id="find-replace-btn">Find & Replace</button>
             </div>
 
             <div class="canvas-container">
@@ -1057,6 +1059,14 @@ Type away and explore the features...`;
             updateToolbar();
         });
 
+        document.getElementById('find-btn').addEventListener('click', () => {
+            openFindReplace(false);
+        });
+
+        document.getElementById('find-replace-btn').addEventListener('click', () => {
+            openFindReplace(true);
+        });
+
         // Update toolbar when canvas receives input
         canvas.addEventListener('click', () => {
             setTimeout(updateToolbar, 10); // Small delay to let cursor position update
@@ -1081,13 +1091,19 @@ Type away and explore the features...`;
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
 
-            // Position the menu at the cursor
-            const x = e.pageX;
-            const y = e.pageY;
+            // Get cursor position relative to viewport
+            const x = e.clientX;
+            const y = e.clientY;
 
-            // Check if menu would go off-screen
-            const menuWidth = 200;
-            const menuHeight = 400; // Approximate
+            // Show menu first to get its actual dimensions
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+
+            // Get menu dimensions
+            const menuRect = contextMenu.getBoundingClientRect();
+            const menuWidth = menuRect.width;
+            const menuHeight = menuRect.height;
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
 
@@ -1096,17 +1112,16 @@ Type away and explore the features...`;
 
             // Adjust horizontal position if needed
             if (x + menuWidth > windowWidth) {
-                menuX = windowWidth - menuWidth - 10;
+                menuX = Math.max(0, windowWidth - menuWidth - 10);
             }
 
             // Adjust vertical position if needed
             if (y + menuHeight > windowHeight) {
-                menuY = windowHeight - menuHeight - 10;
+                menuY = Math.max(0, windowHeight - menuHeight - 10);
             }
 
             contextMenu.style.left = menuX + 'px';
             contextMenu.style.top = menuY + 'px';
-            contextMenu.style.display = 'block';
             contextMenuVisible = true;
 
             // Update menu item states
