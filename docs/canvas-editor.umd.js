@@ -1171,6 +1171,9 @@
             this.historyIndex = -1;
             this.maxHistorySize = 100;
 
+            // Paragraph alignment (keyed by paragraph index)
+            this.paragraphAlignments = new Map();
+
             // Take initial snapshot
             this.takeSnapshot();
 
@@ -1878,6 +1881,9 @@
         }
 
         render() {
+            // Apply alignment adjustments before rendering
+            this.adjustForAlignment();
+
             // Clear canvas
             this.ctx.fillStyle = this.options.backgroundColor;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -2156,6 +2162,94 @@
             } else {
                 // Set for next typed text
                 this.chain.currentFontProperties.color = color;
+            }
+        }
+
+        // Text alignment methods
+        getCurrentParagraphIndex() {
+            const items = this.chain.getItems();
+            const cursorIdx = this.chain.cursorIdx();
+            let paragraphIndex = 0;
+
+            // Count newlines before cursor to determine paragraph
+            for (let i = 0; i < cursorIdx; i++) {
+                if (items[i] instanceof NewlineLink) {
+                    paragraphIndex++;
+                }
+            }
+
+            return paragraphIndex;
+        }
+
+        setAlignment(alignment) {
+            this.takeSnapshot();
+            const paragraphIndex = this.getCurrentParagraphIndex();
+
+            if (alignment === 'left') {
+                // Remove alignment (default is left)
+                this.paragraphAlignments.delete(paragraphIndex);
+            } else {
+                this.paragraphAlignments.set(paragraphIndex, alignment);
+            }
+
+            this.chain.recalc();
+            this.render();
+        }
+
+        toggleCenterAlign() {
+            const paragraphIndex = this.getCurrentParagraphIndex();
+            const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
+
+            if (currentAlign === 'center') {
+                this.setAlignment('left');
+            } else {
+                this.setAlignment('center');
+            }
+        }
+
+        adjustForAlignment() {
+            const items = this.chain.getItems();
+            let currentParagraph = 0;
+            let lineStartIdx = 0;
+
+            for (let i = 0; i <= items.length; i++) {
+                const isLineEnd = i === items.length ||
+                                items[i] instanceof NewlineLink ||
+                                items[i] instanceof VirtualNewlineLink;
+
+                if (isLineEnd) {
+                    const alignment = this.paragraphAlignments.get(currentParagraph) || 'left';
+
+                    if (alignment === 'center') {
+                        // Calculate line width
+                        let lineWidth = 0;
+                        for (let j = lineStartIdx; j < i; j++) {
+                            if (items[j] instanceof TextLink) {
+                                const text = items[j].text;
+                                const metrics = items[j].measureText(this.ctx, text);
+                                lineWidth += metrics.width;
+                            }
+                        }
+
+                        // Calculate offset to center the line
+                        const offset = Math.max(0, (this.editorWidth - lineWidth) / 2);
+
+                        // Apply offset to all items on this line
+                        for (let j = lineStartIdx; j < i; j++) {
+                            if (items[j].computed && items[j].computed.posX !== undefined) {
+                                items[j].computed.posX += offset;
+                            }
+                        }
+                    }
+
+                    // Move to next line
+                    lineStartIdx = i + 1;
+
+                    // Track paragraph boundaries
+                    if (i < items.length && items[i] instanceof NewlineLink) {
+                        currentParagraph++;
+                    }
+                }
             }
         }
 

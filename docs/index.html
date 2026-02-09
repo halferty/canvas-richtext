@@ -417,6 +417,11 @@
                 </div>
 
                 <div class="toolbar-group">
+                    <button id="align-left-btn" class="format-btn" title="Align Left">⬅</button>
+                    <button id="align-center-btn" class="format-btn" title="Align Center">↔</button>
+                </div>
+
+                <div class="toolbar-group">
                     <label for="text-color">Text Color:</label>
                     <input type="color" id="text-color" value="#000000" title="Change text color">
                 </div>
@@ -563,6 +568,19 @@
                 </div>
             </div>
             <div class="menu-separator"></div>
+            <div class="menu-item menu-item-submenu" data-action="alignment">
+                <span class="menu-label">Alignment</span>
+                <span class="menu-arrow">▶</span>
+                <div class="submenu">
+                    <div class="menu-item" data-action="align-left">
+                        <span class="menu-label">Align Left</span>
+                    </div>
+                    <div class="menu-item" data-action="align-center">
+                        <span class="menu-label">Align Center</span>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-separator"></div>
             <div class="menu-item" data-action="select-all">
                 <span class="menu-label">Select All</span>
                 <span class="menu-shortcut">Ctrl+A</span>
@@ -689,6 +707,8 @@ Type away and explore the features...`;
         const strikethroughBtn = document.getElementById('strikethrough-btn');
         const superscriptBtn = document.getElementById('superscript-btn');
         const subscriptBtn = document.getElementById('subscript-btn');
+        const alignLeftBtn = document.getElementById('align-left-btn');
+        const alignCenterBtn = document.getElementById('align-center-btn');
         const textColorInput = document.getElementById('text-color');
         const fontSizeSelect = document.getElementById('font-size');
         const fontFamilySelect = document.getElementById('font-family');
@@ -712,6 +732,12 @@ Type away and explore the features...`;
             strikethroughBtn.classList.toggle('active', fontAtCursor.strikethrough);
             superscriptBtn.classList.toggle('active', fontAtCursor.superscript);
             subscriptBtn.classList.toggle('active', fontAtCursor.subscript);
+
+            // Update alignment button active states
+            const paragraphIndex = editor.getCurrentParagraphIndex();
+            const currentAlignment = editor.paragraphAlignments.get(paragraphIndex) || 'left';
+            alignLeftBtn.classList.toggle('active', currentAlignment === 'left');
+            alignCenterBtn.classList.toggle('active', currentAlignment === 'center');
         }
 
         // Undo/Redo buttons
@@ -758,6 +784,19 @@ Type away and explore the features...`;
 
         subscriptBtn.addEventListener('click', () => {
             editor.toggleSubscript();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        // Alignment buttons
+        alignLeftBtn.addEventListener('click', () => {
+            editor.setAlignment('left');
+            canvas.focus();
+            updateToolbar();
+        });
+
+        alignCenterBtn.addEventListener('click', () => {
+            editor.setAlignment('center');
             canvas.focus();
             updateToolbar();
         });
@@ -925,6 +964,12 @@ Type away and explore the features...`;
                     break;
                 case 'subscript':
                     editor.toggleSubscript();
+                    break;
+                case 'align-left':
+                    editor.setAlignment('left');
+                    break;
+                case 'align-center':
+                    editor.setAlignment('center');
                     break;
                 case 'select-all':
                     editor.selectAll();
