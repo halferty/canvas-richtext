@@ -754,70 +754,70 @@ Type away and explore the features...`;
         // Formatting buttons
         boldBtn.addEventListener('click', () => {
             editor.toggleBold();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         italicBtn.addEventListener('click', () => {
             editor.toggleItalic();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         underlineBtn.addEventListener('click', () => {
             editor.toggleUnderline();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         strikethroughBtn.addEventListener('click', () => {
             editor.toggleStrikethrough();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         superscriptBtn.addEventListener('click', () => {
             editor.toggleSuperscript();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         subscriptBtn.addEventListener('click', () => {
             editor.toggleSubscript();
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Alignment buttons
         alignLeftBtn.addEventListener('click', () => {
             editor.setAlignment('left');
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         alignCenterBtn.addEventListener('click', () => {
             editor.setAlignment('center');
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Text color control
         textColorInput.addEventListener('input', (e) => {
             editor.setTextColor(e.target.value);
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
         // Font controls
         fontSizeSelect.addEventListener('change', (e) => {
             editor.setFontSize(parseInt(e.target.value));
-            canvas.focus(); // Refocus canvas after dropdown interaction
+            canvas.focus({ preventScroll: true }); // Refocus canvas after dropdown interaction
             updateToolbar();
         });
 
         fontFamilySelect.addEventListener('change', (e) => {
             editor.setFontFamily(e.target.value);
-            canvas.focus(); // Refocus canvas after dropdown interaction
+            canvas.focus({ preventScroll: true }); // Refocus canvas after dropdown interaction
             updateToolbar();
         });
 
@@ -989,7 +989,7 @@ Type away and explore the features...`;
             // Close menu and refocus canvas
             contextMenu.style.display = 'none';
             contextMenuVisible = false;
-            canvas.focus();
+            canvas.focus({ preventScroll: true });
             updateToolbar();
         });
 
