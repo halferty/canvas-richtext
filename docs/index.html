@@ -139,6 +139,30 @@
             color: #764ba2;
         }
 
+        .format-btn {
+            background: white;
+            color: #495057;
+            border: 2px solid #ced4da;
+            font-weight: 600;
+            min-width: 36px;
+        }
+
+        .format-btn:hover:not(:disabled) {
+            background: #f8f9ff;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .format-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .format-btn.active:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
         .canvas-container {
             padding: 2rem;
             background: white;
@@ -272,6 +296,15 @@
                 </div>
 
                 <div class="toolbar-group">
+                    <button id="bold-btn" class="format-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
+                    <button id="italic-btn" class="format-btn" title="Italic (Ctrl+I)"><em>I</em></button>
+                    <button id="underline-btn" class="format-btn" title="Underline (Ctrl+U)"><u>U</u></button>
+                    <button id="strikethrough-btn" class="format-btn" title="Strikethrough"><s>S</s></button>
+                    <button id="superscript-btn" class="format-btn" title="Superscript">x²</button>
+                    <button id="subscript-btn" class="format-btn" title="Subscript">x₂</button>
+                </div>
+
+                <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
                     <select id="font-size">
                         <option value="12">12px</option>
@@ -351,8 +384,8 @@
                     <p>Automatic text wrapping with virtual newlines for long content</p>
                 </div>
                 <div class="feature">
-                    <h3>🎨 Font Customization</h3>
-                    <p>Multiple font sizes and families with live preview</p>
+                    <h3>🎨 Rich Text Formatting</h3>
+                    <p>Bold, Italic, Underline, Strikethrough, Superscript, Subscript with keyboard shortcuts</p>
                 </div>
                 <div class="feature">
                     <h3>🧪 100% Synthetic Testing</h3>
@@ -369,6 +402,9 @@
                     <div><strong>Ctrl+C</strong> - Copy</div>
                     <div><strong>Ctrl+X</strong> - Cut</div>
                     <div><strong>Ctrl+V</strong> - Paste</div>
+                    <div><strong>Ctrl+B</strong> - Bold</div>
+                    <div><strong>Ctrl+I</strong> - Italic</div>
+                    <div><strong>Ctrl+U</strong> - Underline</div>
                 </div>
             </div>
 
@@ -398,6 +434,7 @@ Click anywhere to start typing. Try changing the font and size from the toolbar 
 This editor is built entirely on HTML5 Canvas, providing native-like performance and feel. It features:
 
 • Full keyboard support (typing, arrows, backspace, enter)
+• Rich text formatting: Bold, Italic, Underline, Strikethrough, Superscript, Subscript
 • Precise click-to-position cursor placement
 • Text selection and manipulation
 • Drag and drop to move selected text
@@ -416,6 +453,12 @@ Type away and explore the features...`;
         // Get toolbar elements
         const undoBtn = document.getElementById('undo-btn');
         const redoBtn = document.getElementById('redo-btn');
+        const boldBtn = document.getElementById('bold-btn');
+        const italicBtn = document.getElementById('italic-btn');
+        const underlineBtn = document.getElementById('underline-btn');
+        const strikethroughBtn = document.getElementById('strikethrough-btn');
+        const superscriptBtn = document.getElementById('superscript-btn');
+        const subscriptBtn = document.getElementById('subscript-btn');
         const fontSizeSelect = document.getElementById('font-size');
         const fontFamilySelect = document.getElementById('font-family');
 
@@ -429,6 +472,14 @@ Type away and explore the features...`;
             const fontAtCursor = editor.getFontAtCursor();
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
+
+            // Update formatting button active states
+            boldBtn.classList.toggle('active', fontAtCursor.weight === 'bold');
+            italicBtn.classList.toggle('active', fontAtCursor.style === 'italic');
+            underlineBtn.classList.toggle('active', fontAtCursor.underline);
+            strikethroughBtn.classList.toggle('active', fontAtCursor.strikethrough);
+            superscriptBtn.classList.toggle('active', fontAtCursor.superscript);
+            subscriptBtn.classList.toggle('active', fontAtCursor.subscript);
         }
 
         // Undo/Redo buttons
@@ -439,6 +490,43 @@ Type away and explore the features...`;
 
         redoBtn.addEventListener('click', () => {
             editor.redo();
+            updateToolbar();
+        });
+
+        // Formatting buttons
+        boldBtn.addEventListener('click', () => {
+            editor.toggleBold();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        italicBtn.addEventListener('click', () => {
+            editor.toggleItalic();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        underlineBtn.addEventListener('click', () => {
+            editor.toggleUnderline();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        strikethroughBtn.addEventListener('click', () => {
+            editor.toggleStrikethrough();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        superscriptBtn.addEventListener('click', () => {
+            editor.toggleSuperscript();
+            canvas.focus();
+            updateToolbar();
+        });
+
+        subscriptBtn.addEventListener('click', () => {
+            editor.toggleSubscript();
+            canvas.focus();
             updateToolbar();
         });
 

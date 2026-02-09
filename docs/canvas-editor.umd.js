@@ -1043,26 +1043,65 @@
      * FontProperties - Manages font styling properties for text
      */
     class FontProperties {
-        constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal') {
+        constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
+                    underline = false, strikethrough = false, superscript = false, subscript = false) {
             this.size = size;
             this.family = family;
             this.weight = weight;
             this.style = style;
+            this.underline = underline;
+            this.strikethrough = strikethrough;
+            this.superscript = superscript;
+            this.subscript = subscript;
         }
 
         doPropertiesMatch(other) {
             return this.size === other.size &&
                    this.family === other.family &&
                    this.weight === other.weight &&
-                   this.style === other.style;
+                   this.style === other.style &&
+                   this.underline === other.underline &&
+                   this.strikethrough === other.strikethrough &&
+                   this.superscript === other.superscript &&
+                   this.subscript === other.subscript;
         }
 
         clone() {
-            return new FontProperties(this.size, this.family, this.weight, this.style);
+            return new FontProperties(this.size, this.family, this.weight, this.style,
+                                       this.underline, this.strikethrough, this.superscript, this.subscript);
         }
 
         toFontString() {
             return `${this.style} ${this.weight} ${this.size}px ${this.family}`;
+        }
+
+        // Toggle formatting
+        toggleBold() {
+            this.weight = this.weight === 'bold' ? 'normal' : 'bold';
+        }
+
+        toggleItalic() {
+            this.style = this.style === 'italic' ? 'normal' : 'italic';
+        }
+
+        toggleUnderline() {
+            this.underline = !this.underline;
+        }
+
+        toggleStrikethrough() {
+            this.strikethrough = !this.strikethrough;
+        }
+
+        toggleSuperscript() {
+            // Superscript and subscript are mutually exclusive
+            if (this.subscript) this.subscript = false;
+            this.superscript = !this.superscript;
+        }
+
+        toggleSubscript() {
+            // Superscript and subscript are mutually exclusive
+            if (this.superscript) this.superscript = false;
+            this.subscript = !this.subscript;
         }
     }
 
@@ -1229,6 +1268,28 @@
             if (ctrl && key === 'v') {
                 e.preventDefault();
                 this.paste();
+                this.resetCursorBlink();
+                return;
+            }
+
+            // Text formatting shortcuts
+            if (ctrl && key === 'b') {
+                e.preventDefault();
+                this.toggleBold();
+                this.resetCursorBlink();
+                return;
+            }
+
+            if (ctrl && key === 'i') {
+                e.preventDefault();
+                this.toggleItalic();
+                this.resetCursorBlink();
+                return;
+            }
+
+            if (ctrl && key === 'u') {
+                e.preventDefault();
+                this.toggleUnderline();
                 this.resetCursorBlink();
                 return;
             }
@@ -1879,13 +1940,54 @@
         }
 
         renderTextLink(textLink) {
-            const posX = textLink.getPosX();
-            const posY = textLink.getPosY();
+            let posX = textLink.getPosX();
+            let posY = textLink.getPosY();
             const fontProps = textLink.getFontProperties();
 
-            this.ctx.font = fontProps.toFontString();
+            // Apply superscript/subscript offset and size adjustment
+            let fontSize = fontProps.size;
+            if (fontProps.superscript) {
+                fontSize = fontProps.size * 0.7;
+                posY -= fontProps.size * 0.4;
+            } else if (fontProps.subscript) {
+                fontSize = fontProps.size * 0.7;
+                posY += fontProps.size * 0.2;
+            }
+
+            // Create adjusted font string for super/subscript
+            const fontString = fontProps.superscript || fontProps.subscript
+                ? `${fontProps.style} ${fontProps.weight} ${fontSize}px ${fontProps.family}`
+                : fontProps.toFontString();
+
+            this.ctx.font = fontString;
             this.ctx.fillStyle = '#000000';
             this.ctx.fillText(textLink.text, posX, posY);
+
+            // Measure text for decoration lines
+            const metrics = this.ctx.measureText(textLink.text);
+            const textWidth = metrics.width;
+
+            // Draw underline
+            if (fontProps.underline) {
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
+                this.ctx.beginPath();
+                const underlineY = posY + fontSize * 0.1;
+                this.ctx.moveTo(posX, underlineY);
+                this.ctx.lineTo(posX + textWidth, underlineY);
+                this.ctx.stroke();
+            }
+
+            // Draw strikethrough
+            if (fontProps.strikethrough) {
+                this.ctx.strokeStyle = '#000000';
+                this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
+                this.ctx.beginPath();
+                const strikeY = posY - fontSize * 0.3;
+                this.ctx.moveTo(posX, strikeY);
+                this.ctx.lineTo(posX + textWidth, strikeY);
+                this.ctx.stroke();
+            }
         }
 
         renderCursor(cursor) {
@@ -1968,6 +2070,102 @@
                 }
             }
             
+            this.chain.recalc();
+        }
+
+        // Text formatting methods
+        toggleBold() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('weight', (current) => current === 'bold' ? 'normal' : 'bold');
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleBold();
+            }
+        }
+
+        toggleItalic() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('style', (current) => current === 'italic' ? 'normal' : 'italic');
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleItalic();
+            }
+        }
+
+        toggleUnderline() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('underline', (current) => !current);
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleUnderline();
+            }
+        }
+
+        toggleStrikethrough() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('strikethrough', (current) => !current);
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleStrikethrough();
+            }
+        }
+
+        toggleSuperscript() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                // Superscript and subscript are mutually exclusive
+                this.applyFormattingToSelection('subscript', () => false);
+                this.applyFormattingToSelection('superscript', (current) => !current);
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleSuperscript();
+            }
+        }
+
+        toggleSubscript() {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                // Superscript and subscript are mutually exclusive
+                this.applyFormattingToSelection('superscript', () => false);
+                this.applyFormattingToSelection('subscript', (current) => !current);
+                this.render();
+            } else {
+                // Toggle for next typed text
+                this.chain.currentFontProperties.toggleSubscript();
+            }
+        }
+
+        applyFormattingToSelection(property, valueFn) {
+            const items = this.chain.getItems();
+            let pos = 0;
+            const selStart = this.chain.selectionStart;
+            const selEnd = this.chain.selectionEnd;
+
+            for (let item of items) {
+                if (item instanceof TextLink) {
+                    const itemStart = pos;
+                    const itemEnd = pos + item.text.length;
+
+                    // If this item overlaps with the selection, update its property
+                    if (itemEnd > selStart && itemStart < selEnd) {
+                        const currentValue = item.intrinsic.fontProperties[property];
+                        item.intrinsic.fontProperties[property] = valueFn(currentValue);
+                    }
+                    pos += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    pos += 1;
+                }
+            }
+
             this.chain.recalc();
         }
 
