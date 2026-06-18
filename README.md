@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-334%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-347%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -18,7 +18,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 334 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 347 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test

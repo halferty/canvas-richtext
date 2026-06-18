@@ -206,8 +206,21 @@ export class CanvasEditor {
             this.takeSnapshot();
             if (this.chain.hasSelection()) {
                 this.deleteSelection();
+            } else if (ctrl) {
+                this.chain.deleteWordLeft();
             } else {
                 this.chain.backspacePressed();
+            }
+            this.render();
+        } else if (key === 'Delete') {
+            e.preventDefault();
+            this.takeSnapshot();
+            if (this.chain.hasSelection()) {
+                this.deleteSelection();
+            } else if (ctrl) {
+                this.chain.deleteWordRight();
+            } else {
+                this.chain.deleteForward();
             }
             this.render();
         } else if (key === 'Enter') {

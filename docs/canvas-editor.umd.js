@@ -512,6 +512,73 @@
             this.recalc();
         }
 
+        // Delete the characters in the flattened range [startPos, endPos) and
+        // leave the cursor at startPos. Used by word/forward deletion.
+        deleteCharRange(startPos, endPos) {
+            if (startPos > endPos) {
+                [startPos, endPos] = [endPos, startPos];
+            }
+            const total = this.getTotalChars();
+            startPos = Math.max(0, startPos);
+            endPos = Math.min(total, endPos);
+            if (startPos === endPos) return;
+
+            // Remove the cursor; it is reinserted at startPos afterwards.
+            this.items.splice(this.cursorIdx(), 1);
+
+            let pos = 0;
+            const itemsToRemove = [];
+            for (let i = 0; i < this.items.length; i++) {
+                const item = this.items[i];
+                if (item instanceof TextLink) {
+                    const itemStart = pos;
+                    const itemEnd = pos + item.text.length;
+                    if (itemEnd > startPos && itemStart < endPos) {
+                        const s = Math.max(0, startPos - itemStart);
+                        const e = Math.min(item.text.length, endPos - itemStart);
+                        item.text = item.text.substring(0, s) + item.text.substring(e);
+                        if (item.text.length === 0) {
+                            itemsToRemove.push(i);
+                        }
+                    }
+                    pos = itemEnd;
+                } else if (item instanceof NewlineLink) {
+                    if (pos >= startPos && pos < endPos) {
+                        itemsToRemove.push(i);
+                    }
+                    pos += 1;
+                }
+            }
+
+            // Remove emptied/selected items in reverse order to keep indices valid.
+            for (let i = itemsToRemove.length - 1; i >= 0; i--) {
+                this.items.splice(itemsToRemove[i], 1);
+            }
+
+            // Reinsert the cursor at the start of the deleted range. Nothing before
+            // startPos was removed, so its position is unchanged.
+            this.items.unshift(new CursorLink());
+            this.moveCursorToCharPosition(startPos);
+        }
+
+        // Forward delete (the Delete key): remove the character after the cursor.
+        deleteForward() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(pos, pos + 1);
+        }
+
+        // Ctrl+Backspace: delete from the previous word boundary to the cursor.
+        deleteWordLeft() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(this.prevWordBoundary(pos), pos);
+        }
+
+        // Ctrl+Delete: delete from the cursor to the next word boundary.
+        deleteWordRight() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(pos, this.nextWordBoundary(pos));
+        }
+
         // Move cursor to a specific character position
         moveCursorToCharPosition(charPos) {
             const { itemIdx, charOffset } = this.getItemFromCharPosition(charPos);
@@ -1544,8 +1611,21 @@
                 this.takeSnapshot();
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
+                } else if (ctrl) {
+                    this.chain.deleteWordLeft();
                 } else {
                     this.chain.backspacePressed();
+                }
+                this.render();
+            } else if (key === 'Delete') {
+                e.preventDefault();
+                this.takeSnapshot();
+                if (this.chain.hasSelection()) {
+                    this.deleteSelection();
+                } else if (ctrl) {
+                    this.chain.deleteWordRight();
+                } else {
+                    this.chain.deleteForward();
                 }
                 this.render();
             } else if (key === 'Enter') {
