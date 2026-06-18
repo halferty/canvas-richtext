@@ -220,9 +220,13 @@ export class CanvasEditor {
             this.render();
         } else if (key === 'ArrowLeft') {
             e.preventDefault();
-            // Shift extends the selection; otherwise plain cursor movement
-            // (which collapses any existing selection internally).
-            if (e.shiftKey) {
+            // Ctrl moves by whole words; Shift extends the selection.
+            // Plain cursor movement collapses any existing selection internally.
+            if (ctrl && e.shiftKey) {
+                this.chain.shiftWordLeftPressed();
+            } else if (ctrl) {
+                this.chain.wordLeftPressed();
+            } else if (e.shiftKey) {
                 this.chain.shiftLeftArrowPressed();
             } else {
                 this.chain.leftArrowPressed();
@@ -230,10 +234,39 @@ export class CanvasEditor {
             this.render();
         } else if (key === 'ArrowRight') {
             e.preventDefault();
-            if (e.shiftKey) {
+            if (ctrl && e.shiftKey) {
+                this.chain.shiftWordRightPressed();
+            } else if (ctrl) {
+                this.chain.wordRightPressed();
+            } else if (e.shiftKey) {
                 this.chain.shiftRightArrowPressed();
             } else {
                 this.chain.rightArrowPressed();
+            }
+            this.render();
+        } else if (key === 'Home') {
+            e.preventDefault();
+            // Ctrl jumps to document start; Shift extends the selection.
+            if (ctrl && e.shiftKey) {
+                this.chain.shiftDocumentStartPressed();
+            } else if (ctrl) {
+                this.chain.documentStartPressed();
+            } else if (e.shiftKey) {
+                this.chain.shiftHomePressed();
+            } else {
+                this.chain.homePressed();
+            }
+            this.render();
+        } else if (key === 'End') {
+            e.preventDefault();
+            if (ctrl && e.shiftKey) {
+                this.chain.shiftDocumentEndPressed();
+            } else if (ctrl) {
+                this.chain.documentEndPressed();
+            } else if (e.shiftKey) {
+                this.chain.shiftEndPressed();
+            } else {
+                this.chain.endPressed();
             }
             this.render();
         } else if (key === 'ArrowUp') {

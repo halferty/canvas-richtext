@@ -659,6 +659,167 @@ export class Chain {
         this.updateSelectionFromAnchor();
     }
 
+    // ----- Home / End (visual line) -----
+
+    // Character positions of the start and end of the visual line the cursor
+    // is currently on. Visual lines are delimited by hard newlines and by the
+    // virtual newlines inserted by word wrapping.
+    getLineBounds() {
+        const cursorIdx = this.cursorIdx();
+
+        let startIdx = 0;
+        for (let i = cursorIdx - 1; i >= 0; i--) {
+            if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                startIdx = i + 1;
+                break;
+            }
+        }
+
+        let endIdx = this.items.length;
+        for (let i = cursorIdx + 1; i < this.items.length; i++) {
+            if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                endIdx = i;
+                break;
+            }
+        }
+
+        return {
+            startPos: this.getCharPosition(startIdx, 0),
+            endPos: this.getCharPosition(endIdx, 0)
+        };
+    }
+
+    homePressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getLineBounds().startPos);
+    }
+
+    endPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getLineBounds().endPos);
+    }
+
+    shiftHomePressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getLineBounds().startPos);
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftEndPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getLineBounds().endPos);
+        this.updateSelectionFromAnchor();
+    }
+
+    // ----- Document start / end (Ctrl+Home / Ctrl+End) -----
+
+    // Total number of characters in the flattened text.
+    getTotalChars() {
+        let total = 0;
+        for (const item of this.items) {
+            if (item instanceof TextLink) {
+                total += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                total += 1;
+            }
+        }
+        return total;
+    }
+
+    documentStartPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(0);
+    }
+
+    documentEndPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getTotalChars());
+    }
+
+    shiftDocumentStartPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(0);
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftDocumentEndPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getTotalChars());
+        this.updateSelectionFromAnchor();
+    }
+
+    // ----- Word-wise navigation (Ctrl+Left / Ctrl+Right) -----
+
+    // Flattened text, aligned with getCharPosition's character counting
+    // (TextLink characters plus one '\n' per hard newline; virtual newlines
+    // and the cursor contribute nothing).
+    getFlatText() {
+        let text = '';
+        for (const item of this.items) {
+            if (item instanceof TextLink) {
+                text += item.text;
+            } else if (item instanceof NewlineLink) {
+                text += '\n';
+            }
+        }
+        return text;
+    }
+
+    // Word boundary to the left of pos: skip any whitespace, then skip the
+    // run of word characters, landing at the start of that word.
+    prevWordBoundary(pos) {
+        const text = this.getFlatText();
+        let i = pos;
+        while (i > 0 && /\s/.test(text[i - 1])) i--;
+        while (i > 0 && !/\s/.test(text[i - 1])) i--;
+        return i;
+    }
+
+    // Word boundary to the right of pos: skip any whitespace, then skip the
+    // run of word characters, landing just after that word.
+    nextWordBoundary(pos) {
+        const text = this.getFlatText();
+        const len = text.length;
+        let i = pos;
+        while (i < len && /\s/.test(text[i])) i++;
+        while (i < len && !/\s/.test(text[i])) i++;
+        return i;
+    }
+
+    wordLeftPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+    }
+
+    wordRightPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+    }
+
+    shiftWordLeftPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftWordRightPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+        this.updateSelectionFromAnchor();
+    }
+
     enterPressed() {
         this.items.splice(this.cursorIdx(), 0, new NewlineLink());
         this.recalc();
