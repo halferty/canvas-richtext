@@ -4,13 +4,14 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-364%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-371%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
 - 🎨 **Canvas-based rendering** - Smooth, high-performance text rendering
 - ⌨️ **Full keyboard support** - Natural text editing with cursor movement, backspace, enter
 - 🖱️ **Mouse interaction** - Click to position cursor anywhere in the text
+- 📱 **Touch support** - Tap to position the cursor and drag to scroll on touch devices
 - 📝 **Rich text support** - Multiple font sizes, families, weights, and styles
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
 - 📜 **Scrolling** - Mouse-wheel, draggable scrollbar, and PageUp/PageDown with cursor auto-scroll for long documents
@@ -19,7 +20,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 364 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 371 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -251,7 +252,7 @@ Future enhancements planned:
 - [ ] Text alignment (left, center, right, justify)
 - [ ] Line height customization
 - [x] Vertical scrolling for long documents
-- [ ] Touch device support
+- [x] Touch device support
 - [ ] Canvas-based toolbar buttons
 
 ## Acknowledgments

@@ -57,6 +57,11 @@ export class CanvasEditor {
         // Scrollbar drag state
         this.isScrollbarDragging = false;
         this.scrollbarGrabOffset = 0;
+        // Touch state (tap-to-place-cursor vs drag-to-scroll)
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.touchLastY = 0;
+        this.touchMoved = false;
 
         // Selection state
         this.isMouseDown = false;
@@ -106,6 +111,9 @@ export class CanvasEditor {
         this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
         this.boundHandleMouseOver = (e) => this.handleMouseOver(e);
         this.boundHandleWheel = (e) => this.handleWheel(e);
+        this.boundHandleTouchStart = (e) => this.handleTouchStart(e);
+        this.boundHandleTouchMove = (e) => this.handleTouchMove(e);
+        this.boundHandleTouchEnd = (e) => this.handleTouchEnd(e);
 
         // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
         if (typeof this.canvas.addEventListener === 'function') {
@@ -118,6 +126,11 @@ export class CanvasEditor {
             this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
             this.canvas.addEventListener('mouseover', this.boundHandleMouseOver);
             this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
+
+            // Touch events (passive: false so we can preventDefault to scroll)
+            this.canvas.addEventListener('touchstart', this.boundHandleTouchStart, { passive: false });
+            this.canvas.addEventListener('touchmove', this.boundHandleTouchMove, { passive: false });
+            this.canvas.addEventListener('touchend', this.boundHandleTouchEnd, { passive: false });
 
             // Make canvas focusable and set initial cursor
             this.canvas.tabIndex = 1;
@@ -1034,6 +1047,76 @@ export class CanvasEditor {
         this.clampScroll();
     }
 
+    // ----- Touch support -----
+
+    handleTouchStart(e) {
+        if (!e.touches || e.touches.length !== 1) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const rawX = e.touches[0].clientX - rect.left;
+        const rawY = e.touches[0].clientY - rect.top;
+
+        this.touchStartX = rawX;
+        this.touchStartY = rawY;
+        this.touchLastY = rawY;
+        this.touchMoved = false;
+
+        // A touch on the scrollbar drives it directly.
+        if (this.startScrollbarDragIfHit(rawX, rawY)) {
+            if (e.preventDefault) e.preventDefault();
+        }
+    }
+
+    handleTouchMove(e) {
+        if (!e.touches || e.touches.length !== 1) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const rawX = e.touches[0].clientX - rect.left;
+        const rawY = e.touches[0].clientY - rect.top;
+
+        if (this.isScrollbarDragging) {
+            const m = this.getScrollbarMetrics();
+            if (m) {
+                this.updateScrollFromThumb(rawY, m);
+                this.render();
+            }
+            if (e.preventDefault) e.preventDefault();
+            return;
+        }
+
+        const TAP_THRESHOLD = 10;
+        if (Math.abs(rawY - this.touchStartY) > TAP_THRESHOLD ||
+            Math.abs(rawX - this.touchStartX) > TAP_THRESHOLD) {
+            this.touchMoved = true;
+        }
+
+        // Drag to pan the content (content follows the finger).
+        if (this.getMaxScroll() > 0) {
+            this.scrollY += this.touchLastY - rawY;
+            this.clampScroll();
+            this.render();
+            if (e.preventDefault) e.preventDefault();
+        }
+        this.touchLastY = rawY;
+    }
+
+    handleTouchEnd(e) {
+        if (this.isScrollbarDragging) {
+            this.isScrollbarDragging = false;
+            return;
+        }
+
+        // A tap (negligible movement) positions the cursor.
+        if (!this.touchMoved) {
+            const x = this.touchStartX - this.options.padding;
+            const y = this.touchStartY - this.options.padding + this.scrollY;
+            this.chain.clearSelection();
+            this.chain.clicked(x, y);
+            this.scrollToCursorOnNextRender = true;
+            this.render();
+            if (typeof this.canvas.focus === 'function') this.canvas.focus();
+            if (e.preventDefault) e.preventDefault();
+        }
+    }
+
     render() {
         // Apply alignment adjustments before rendering
         this.adjustForAlignment();
@@ -1872,6 +1955,9 @@ export class CanvasEditor {
         this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
         this.canvas.removeEventListener('mouseover', this.boundHandleMouseOver);
         this.canvas.removeEventListener('wheel', this.boundHandleWheel);
+        this.canvas.removeEventListener('touchstart', this.boundHandleTouchStart);
+        this.canvas.removeEventListener('touchmove', this.boundHandleTouchMove);
+        this.canvas.removeEventListener('touchend', this.boundHandleTouchEnd);
     }
 
     // Debug method to dump full editor state
