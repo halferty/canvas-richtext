@@ -21,6 +21,10 @@ export class CanvasEditor {
             defaultFontFamily: options.defaultFontFamily || 'Arial',
             defaultFontWeight: options.defaultFontWeight || 'normal',
             defaultFontStyle: options.defaultFontStyle || 'normal',
+            scrollbarWidth: options.scrollbarWidth || 10,
+            scrollbarTrackColor: options.scrollbarTrackColor || 'rgba(0, 0, 0, 0.05)',
+            scrollbarThumbColor: options.scrollbarThumbColor || 'rgba(0, 0, 0, 0.3)',
+            minScrollbarThumbHeight: options.minScrollbarThumbHeight || 24,
             debug: options.debug || false
         };
 
@@ -50,6 +54,9 @@ export class CanvasEditor {
         // keyboard actions; deliberately NOT set by wheel scrolling so the user
         // can scroll away freely.
         this.scrollToCursorOnNextRender = false;
+        // Scrollbar drag state
+        this.isScrollbarDragging = false;
+        this.scrollbarGrabOffset = 0;
 
         // Selection state
         this.isMouseDown = false;
@@ -486,6 +493,12 @@ export class CanvasEditor {
 
     handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
+
+        // Scrollbar interaction takes precedence over text positioning.
+        if (this.startScrollbarDragIfHit(e.clientX - rect.left, e.clientY - rect.top)) {
+            return;
+        }
+
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
@@ -549,6 +562,17 @@ export class CanvasEditor {
     }
 
     handleMouseMove(e) {
+        // Dragging the scrollbar thumb.
+        if (this.isScrollbarDragging) {
+            const rect = this.canvas.getBoundingClientRect();
+            const m = this.getScrollbarMetrics();
+            if (m) {
+                this.updateScrollFromThumb(e.clientY - rect.top, m);
+                this.render();
+            }
+            return;
+        }
+
         if (!this.isMouseDown) return;
 
         const rect = this.canvas.getBoundingClientRect();
@@ -593,6 +617,12 @@ export class CanvasEditor {
     }
 
     handleMouseUp(e) {
+        // End a scrollbar drag.
+        if (this.isScrollbarDragging) {
+            this.isScrollbarDragging = false;
+            return;
+        }
+
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding + this.scrollY;
@@ -910,6 +940,71 @@ export class CanvasEditor {
         this.render();
     }
 
+    // Geometry of the scrollbar in canvas (screen) coordinates, or null when
+    // the content fits and no scrollbar is shown. Thumb size/position are
+    // independent of scrollY except for thumbY.
+    getScrollbarMetrics() {
+        const maxScroll = this.getMaxScroll();
+        if (maxScroll <= 0) return null;
+
+        const width = this.options.scrollbarWidth;
+        const trackX = this.canvas.width - width;
+        const trackHeight = this.canvas.height;
+        const viewport = this.getViewportHeight();
+
+        const visibleRatio = Math.min(1, viewport / this.chain.contentHeight);
+        const thumbHeight = Math.max(
+            this.options.minScrollbarThumbHeight,
+            Math.min(trackHeight, trackHeight * visibleRatio)
+        );
+        const thumbY = (this.scrollY / maxScroll) * (trackHeight - thumbHeight);
+
+        return { width, trackX, trackHeight, thumbHeight, thumbY };
+    }
+
+    // Set scrollY so the thumb's top lands at (rawY - grabOffset).
+    updateScrollFromThumb(rawY, metrics) {
+        const travel = metrics.trackHeight - metrics.thumbHeight;
+        const newThumbY = rawY - this.scrollbarGrabOffset;
+        const ratio = travel > 0 ? newThumbY / travel : 0;
+        this.scrollY = ratio * this.getMaxScroll();
+        this.clampScroll();
+    }
+
+    // If (rawX, rawY) is on the scrollbar, begin a drag and return true.
+    // A click on the track (off the thumb) jumps the thumb under the cursor.
+    startScrollbarDragIfHit(rawX, rawY) {
+        const m = this.getScrollbarMetrics();
+        if (!m || rawX < m.trackX) return false;
+
+        this.isScrollbarDragging = true;
+        if (rawY >= m.thumbY && rawY <= m.thumbY + m.thumbHeight) {
+            this.scrollbarGrabOffset = rawY - m.thumbY;
+        } else {
+            this.scrollbarGrabOffset = m.thumbHeight / 2;
+            this.updateScrollFromThumb(rawY, m);
+        }
+        this.render();
+        return true;
+    }
+
+    renderScrollbar() {
+        const m = this.getScrollbarMetrics();
+        if (!m) return;
+
+        this.ctx.fillStyle = this.options.scrollbarTrackColor;
+        this.ctx.fillRect(m.trackX, 0, m.width, m.trackHeight);
+
+        const inset = 2;
+        this.ctx.fillStyle = this.options.scrollbarThumbColor;
+        this.ctx.fillRect(
+            m.trackX + inset,
+            m.thumbY + inset,
+            m.width - inset * 2,
+            m.thumbHeight - inset * 2
+        );
+    }
+
     // Move the cursor by roughly one viewport of lines. direction is -1 (up)
     // or +1 (down). Extends the selection when extendSelection is true. Also
     // shifts the viewport by a page so the gesture scrolls even when the cursor
@@ -982,6 +1077,9 @@ export class CanvasEditor {
         }
 
         this.ctx.restore();
+
+        // Scrollbar is drawn in screen space, on top of the content.
+        this.renderScrollbar();
     }
 
     renderSelection() {
