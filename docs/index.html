@@ -536,6 +536,7 @@
                 <div class="toolbar-group">
                     <button id="align-left-btn" class="format-btn" title="Align Left">⬅</button>
                     <button id="align-center-btn" class="format-btn" title="Align Center">↔</button>
+                    <button id="align-right-btn" class="format-btn" title="Align Right">➡</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -722,6 +723,9 @@
                     <div class="menu-item" data-action="align-center">
                         <span class="menu-label">Align Center</span>
                     </div>
+                    <div class="menu-item" data-action="align-right">
+                        <span class="menu-label">Align Right</span>
+                    </div>
                 </div>
             </div>
             <div class="menu-item menu-item-submenu" data-action="line-spacing">
@@ -852,6 +856,8 @@
                     <div><strong>Ctrl+Home/End</strong> - Doc Start/End</div>
                     <div><strong>Ctrl+Backspace/Delete</strong> - Delete Word</div>
                     <div><strong>PageUp/PageDown</strong> - Scroll a Page</div>
+                    <div><strong>Tab</strong> - Insert Spaces</div>
+                    <div><strong>Esc</strong> - Clear Selection</div>
                     <div><strong>Ctrl+C</strong> - Copy</div>
                     <div><strong>Ctrl+X</strong> - Cut</div>
                     <div><strong>Ctrl+V</strong> - Paste</div>
@@ -914,6 +920,7 @@ Type away and explore the features...`;
         const subscriptBtn = document.getElementById('subscript-btn');
         const alignLeftBtn = document.getElementById('align-left-btn');
         const alignCenterBtn = document.getElementById('align-center-btn');
+        const alignRightBtn = document.getElementById('align-right-btn');
         const textColorInput = document.getElementById('text-color');
         const fontSizeSelect = document.getElementById('font-size');
         const increaseFontBtn = document.getElementById('increase-font-btn');
@@ -948,6 +955,7 @@ Type away and explore the features...`;
             const currentAlignment = editor.paragraphAlignments.get(paragraphIndex) || 'left';
             alignLeftBtn.classList.toggle('active', currentAlignment === 'left');
             alignCenterBtn.classList.toggle('active', currentAlignment === 'center');
+            alignRightBtn.classList.toggle('active', currentAlignment === 'right');
         }
 
         // Undo/Redo buttons
@@ -1007,6 +1015,12 @@ Type away and explore the features...`;
 
         alignCenterBtn.addEventListener('click', () => {
             editor.setAlignment('center');
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        alignRightBtn.addEventListener('click', () => {
+            editor.setAlignment('right');
             canvas.focus({ preventScroll: true });
             updateToolbar();
         });
@@ -1217,6 +1231,9 @@ Type away and explore the features...`;
                     break;
                 case 'align-center':
                     editor.setAlignment('center');
+                    break;
+                case 'align-right':
+                    editor.setAlignment('right');
                     break;
                 case 'increase-font-size':
                     editor.increaseFontSize();

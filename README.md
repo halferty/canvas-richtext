@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-371%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-379%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -20,7 +20,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 371 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 379 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -142,6 +142,9 @@ const editor = new CanvasEditor(canvas, {
     scrollbarThumbColor: 'rgba(0, 0, 0, 0.3)',
     minScrollbarThumbHeight: 24,
     
+    // Number of spaces inserted by the Tab key
+    tabSize: 4,
+    
     // Enable debug logging
     debug: false
 });
@@ -243,16 +246,21 @@ BSD License - feel free to use this in your projects!
 
 ## Roadmap
 
-Future enhancements planned:
+Implemented:
 
-- [ ] Text selection and copy/paste
-- [ ] Undo/redo functionality
-- [ ] Bold, italic, underline formatting
-- [ ] Multiple font colors
-- [ ] Text alignment (left, center, right, justify)
-- [ ] Line height customization
+- [x] Text selection and copy/paste
+- [x] Undo/redo functionality
+- [x] Bold, italic, underline formatting (plus strikethrough, super/subscript)
+- [x] Multiple font colors
+- [x] Text alignment (left, center, right)
+- [x] Line height customization
+- [x] Keyboard navigation (Home/End, word-wise Ctrl+Arrows, PageUp/PageDown)
 - [x] Vertical scrolling for long documents
 - [x] Touch device support
+
+Still planned:
+
+- [ ] Justified text alignment
 - [ ] Canvas-based toolbar buttons
 
 ## Acknowledgments

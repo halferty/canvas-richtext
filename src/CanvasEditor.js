@@ -25,6 +25,7 @@ export class CanvasEditor {
             scrollbarTrackColor: options.scrollbarTrackColor || 'rgba(0, 0, 0, 0.05)',
             scrollbarThumbColor: options.scrollbarThumbColor || 'rgba(0, 0, 0, 0.3)',
             minScrollbarThumbHeight: options.minScrollbarThumbHeight || 24,
+            tabSize: options.tabSize || 4,
             debug: options.debug || false
         };
 
@@ -340,6 +341,24 @@ export class CanvasEditor {
             e.preventDefault();
             this.pageMove(1, e.shiftKey);
             this.render();
+        } else if (key === 'Tab') {
+            // Insert spaces instead of moving focus off the canvas.
+            e.preventDefault();
+            this.takeSnapshot();
+            if (this.chain.hasSelection()) {
+                this.deleteSelection();
+            }
+            for (let i = 0; i < this.options.tabSize; i++) {
+                this.chain.printableKeyPressed(' ');
+            }
+            this.render();
+        } else if (key === 'Escape') {
+            // Clear any active selection.
+            e.preventDefault();
+            if (this.chain.hasSelection()) {
+                this.chain.clearSelection();
+                this.render();
+            }
         } else if (key.length === 1 && !ctrl) {
             // Printable character - prevent default to stop page scrolling
             e.preventDefault();
@@ -1578,21 +1597,24 @@ export class CanvasEditor {
             if (isLineEnd) {
                 const alignment = this.paragraphAlignments.get(currentParagraph) || 'left';
 
-                if (alignment === 'center') {
-                    // Calculate line width
-                    let lineWidth = 0;
-                    for (let j = lineStartIdx; j < i; j++) {
-                        if (items[j] instanceof TextLink) {
-                            const text = items[j].text;
-                            const metrics = items[j].measureText(this.ctx, text);
-                            lineWidth += metrics.width;
-                        }
+                // Recompute this visual line's base X layout from 0. Doing this
+                // every time keeps alignment idempotent across renders (offsets
+                // must not accumulate frame to frame).
+                let lineWidth = 0;
+                for (let j = lineStartIdx; j < i; j++) {
+                    if (items[j].computed) {
+                        items[j].computed.posX = lineWidth;
                     }
+                    if (items[j] instanceof TextLink) {
+                        lineWidth += items[j].measureText(this.ctx).width;
+                    }
+                }
 
-                    // Calculate offset to center the line
-                    const offset = Math.max(0, (this.editorWidth - lineWidth) / 2);
+                if (alignment === 'center' || alignment === 'right') {
+                    // Center splits the free space; right pushes it all left.
+                    const freeSpace = Math.max(0, this.editorWidth - lineWidth);
+                    const offset = alignment === 'center' ? freeSpace / 2 : freeSpace;
 
-                    // Apply offset to all items on this line
                     for (let j = lineStartIdx; j < i; j++) {
                         if (items[j].computed && items[j].computed.posX !== undefined) {
                             items[j].computed.posX += offset;
