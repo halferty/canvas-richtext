@@ -44,6 +44,13 @@ export class CanvasEditor {
         this.blinkCycleStartTime = Date.now();
         this.animationFrameId = null;
 
+        // Vertical scroll state (content pixels scrolled off the top)
+        this.scrollY = 0;
+        // When set, the next render scrolls to keep the cursor visible. Set by
+        // keyboard actions; deliberately NOT set by wheel scrolling so the user
+        // can scroll away freely.
+        this.scrollToCursorOnNextRender = false;
+
         // Selection state
         this.isMouseDown = false;
         this.mouseDownPos = null;
@@ -91,6 +98,7 @@ export class CanvasEditor {
         this.boundHandleMouseMove = (e) => this.handleMouseMove(e);
         this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
         this.boundHandleMouseOver = (e) => this.handleMouseOver(e);
+        this.boundHandleWheel = (e) => this.handleWheel(e);
 
         // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
         if (typeof this.canvas.addEventListener === 'function') {
@@ -102,6 +110,7 @@ export class CanvasEditor {
             this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
             this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
             this.canvas.addEventListener('mouseover', this.boundHandleMouseOver);
+            this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
 
             // Make canvas focusable and set initial cursor
             this.canvas.tabIndex = 1;
@@ -118,7 +127,7 @@ export class CanvasEditor {
 
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
-        const y = e.clientY - rect.top - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
         const pos = this.getCharacterAtPosition(x, y);
         if (this.isPositionInSelection(pos)) {
@@ -131,6 +140,9 @@ export class CanvasEditor {
     handleKeyDown(e) {
         const key = e.key;
         const ctrl = e.ctrlKey || e.metaKey;
+
+        // Any keyboard action should bring the cursor back into view on render.
+        this.scrollToCursorOnNextRender = true;
 
         // Undo/Redo shortcuts
         if (ctrl && key === 'z' && !e.shiftKey) {
@@ -300,6 +312,14 @@ export class CanvasEditor {
                 this.chain.downArrowPressed();
             }
             this.render();
+        } else if (key === 'PageUp') {
+            e.preventDefault();
+            this.pageMove(-1, e.shiftKey);
+            this.render();
+        } else if (key === 'PageDown') {
+            e.preventDefault();
+            this.pageMove(1, e.shiftKey);
+            this.render();
         } else if (key.length === 1 && !ctrl) {
             // Printable character - prevent default to stop page scrolling
             e.preventDefault();
@@ -467,7 +487,7 @@ export class CanvasEditor {
     handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
-        const y = e.clientY - rect.top - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
         // Track click count for double/triple click
         const now = Date.now();
@@ -533,7 +553,7 @@ export class CanvasEditor {
 
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
-        const y = e.clientY - rect.top - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
         // Calculate drag distance
         const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
@@ -575,7 +595,7 @@ export class CanvasEditor {
     handleMouseUp(e) {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
-        const y = e.clientY - rect.top - this.options.padding;
+        const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
         // Handle drag and drop completion
         if (this.isDragging && this.draggedText) {
@@ -846,17 +866,98 @@ export class CanvasEditor {
         this.blinkCycleStartTime = Date.now();
     }
 
+    // Height of the visible content area (canvas minus top/bottom padding).
+    getViewportHeight() {
+        return Math.max(0, this.canvas.height - this.options.padding * 2);
+    }
+
+    // Maximum vertical scroll offset given the current content.
+    getMaxScroll() {
+        return Math.max(0, this.chain.contentHeight - this.getViewportHeight());
+    }
+
+    // Keep scrollY within [0, maxScroll].
+    clampScroll() {
+        const max = this.getMaxScroll();
+        if (this.scrollY > max) this.scrollY = max;
+        if (this.scrollY < 0) this.scrollY = 0;
+    }
+
+    // Adjust scrollY so the cursor's vertical extent is within the viewport.
+    scrollCursorIntoView() {
+        const cursor = this.chain.getItems().find(item => item instanceof CursorLink);
+        if (!cursor || !cursor.computed) return;
+
+        const viewport = this.getViewportHeight();
+        const height = cursor.computed.height || this.options.defaultFontSize;
+        const top = cursor.computed.posY - height;
+        const bottom = cursor.computed.posY;
+
+        if (bottom > this.scrollY + viewport) {
+            this.scrollY = bottom - viewport;
+        }
+        if (top < this.scrollY) {
+            this.scrollY = top;
+        }
+        this.clampScroll();
+    }
+
+    handleWheel(e) {
+        if (this.getMaxScroll() <= 0) return; // nothing to scroll
+        if (e.preventDefault) e.preventDefault();
+        this.scrollY += e.deltaY;
+        this.clampScroll();
+        this.render();
+    }
+
+    // Move the cursor by roughly one viewport of lines. direction is -1 (up)
+    // or +1 (down). Extends the selection when extendSelection is true. Also
+    // shifts the viewport by a page so the gesture scrolls even when the cursor
+    // started near the target edge.
+    pageMove(direction, extendSelection) {
+        const viewport = this.getViewportHeight();
+        const cursor = this.chain.getItems().find(item => item instanceof CursorLink);
+        const lineHeight = (cursor && cursor.computed && cursor.computed.lineHeight)
+            || this.options.defaultFontSize * 1.5;
+        const lines = Math.max(1, Math.floor(viewport / lineHeight));
+
+        if (!extendSelection) {
+            this.chain.clearSelection();
+        }
+
+        for (let i = 0; i < lines; i++) {
+            if (direction < 0) {
+                if (extendSelection) this.chain.shiftUpArrowPressed();
+                else this.chain.upArrowPressed();
+            } else {
+                if (extendSelection) this.chain.shiftDownArrowPressed();
+                else this.chain.downArrowPressed();
+            }
+        }
+
+        this.scrollY += direction * viewport;
+        this.clampScroll();
+    }
+
     render() {
         // Apply alignment adjustments before rendering
         this.adjustForAlignment();
+
+        // Auto-scroll to the cursor after keyboard-driven changes (but not
+        // after wheel scrolling, which leaves the flag unset).
+        if (this.scrollToCursorOnNextRender) {
+            this.scrollCursorIntoView();
+            this.scrollToCursorOnNextRender = false;
+        }
+        this.clampScroll();
 
         // Clear canvas
         this.ctx.fillStyle = this.options.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Translate for padding
+        // Translate for padding and current scroll offset
         this.ctx.save();
-        this.ctx.translate(this.options.padding, this.options.padding);
+        this.ctx.translate(this.options.padding, this.options.padding - this.scrollY);
 
         // Render find matches first
         if (this.findMatches.length > 0) {
@@ -1655,6 +1756,7 @@ export class CanvasEditor {
         this.canvas.height = height;
         this.editorWidth = width - (this.options.padding * 2);
         this.chain.setWidth(this.editorWidth);
+        this.clampScroll();
         this.render();
     }
 
@@ -1671,6 +1773,7 @@ export class CanvasEditor {
         this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
         this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
         this.canvas.removeEventListener('mouseover', this.boundHandleMouseOver);
+        this.canvas.removeEventListener('wheel', this.boundHandleWheel);
     }
 
     // Debug method to dump full editor state

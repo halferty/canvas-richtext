@@ -16,6 +16,8 @@ export class Chain {
         // Fixed end of a keyboard (shift+arrow) selection. The cursor marks
         // the moving "focus" end; this marks the stationary "anchor" end.
         this.selectionAnchor = null;
+        // Total vertical extent of the laid-out content (set by recalc).
+        this.contentHeight = 0;
     }
 
     printItems() {
@@ -337,6 +339,10 @@ export class Chain {
                 };
             }
         }
+
+        // Total vertical extent of the content (bottom of the last line),
+        // used by the editor to bound scrolling.
+        this.contentHeight = posY;
     }
 
     recalc() {

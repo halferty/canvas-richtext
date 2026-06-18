@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-347%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-357%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -13,12 +13,13 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 - 🖱️ **Mouse interaction** - Click to position cursor anywhere in the text
 - 📝 **Rich text support** - Multiple font sizes, families, weights, and styles
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
+- 📜 **Scrolling** - Mouse-wheel and PageUp/PageDown with cursor auto-scroll for long documents
 - 🎯 **Cursor management** - Blinking cursor with customizable appearance
 - 🧩 **Modular architecture** - Clean separation of concerns with Chain/Link pattern
 
 ## Testing
 
-This library features **100% synthetic testing** - all 347 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 357 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -243,7 +244,7 @@ Future enhancements planned:
 - [ ] Multiple font colors
 - [ ] Text alignment (left, center, right, justify)
 - [ ] Line height customization
-- [ ] Vertical scrolling for long documents
+- [x] Vertical scrolling for long documents
 - [ ] Touch device support
 - [ ] Canvas-based toolbar buttons
 
