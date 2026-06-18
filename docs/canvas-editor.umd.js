@@ -125,6 +125,9 @@
             this.currentFontProperties = defaultFontProperties;
             this.selectionStart = null;
             this.selectionEnd = null;
+            // Fixed end of a keyboard (shift+arrow) selection. The cursor marks
+            // the moving "focus" end; this marks the stationary "anchor" end.
+            this.selectionAnchor = null;
         }
 
         printItems() {
@@ -545,14 +548,21 @@
         leftArrowPressed() {
             // Clear target X when moving horizontally
             this.targetCursorX = undefined;
-            
+
             // If there's a selection, move to the start of it
             if (this.hasSelection()) {
                 this.moveCursorToCharPosition(this.selectionStart);
                 this.clearSelection();
                 return;
             }
-            
+            this.clearSelection();
+            this.moveCursorLeftOneChar();
+        }
+
+        // Core "move cursor one character to the left" logic, shared by
+        // leftArrowPressed and shiftLeftArrowPressed.
+        moveCursorLeftOneChar() {
+            this.targetCursorX = undefined;
             if (this.cursorIdx() > 0) {
                 for (let i = this.cursorIdx() - 1; i >= 0; i--) {
                     if (this.items[i] instanceof TextLink) {
@@ -583,14 +593,21 @@
         rightArrowPressed() {
             // Clear target X when moving horizontally
             this.targetCursorX = undefined;
-            
+
             // If there's a selection, move to the end of it
             if (this.hasSelection()) {
                 this.moveCursorToCharPosition(this.selectionEnd);
                 this.clearSelection();
                 return;
             }
-            
+            this.clearSelection();
+            this.moveCursorRightOneChar();
+        }
+
+        // Core "move cursor one character to the right" logic, shared by
+        // rightArrowPressed and shiftRightArrowPressed.
+        moveCursorRightOneChar() {
+            this.targetCursorX = undefined;
             if (this.cursorIdx() < this.items.length - 1) {
                 for (let i = this.cursorIdx() + 1; i < this.items.length; i++) {
                     if (this.items[i] instanceof TextLink) {
@@ -688,9 +705,61 @@
                 this.recalc();
                 return;
             }
-            
+
             // Find the best position on the target line (closest X to currentX)
             this.clicked(currentX, targetY);
+        }
+
+        // Character position of the cursor in the flattened text.
+        getCursorCharPosition() {
+            return this.getCharPosition(this.cursorIdx(), 0);
+        }
+
+        // Ensure a selection anchor exists, defaulting to the current cursor
+        // position. Called when a shift+arrow gesture begins.
+        beginSelectionIfNeeded() {
+            if (this.selectionAnchor === null) {
+                this.selectionAnchor = this.getCursorCharPosition();
+            }
+        }
+
+        // After the cursor has moved, recompute the selection range from the
+        // fixed anchor to the new cursor (focus) position.
+        updateSelectionFromAnchor() {
+            const focus = this.getCursorCharPosition();
+            if (focus === this.selectionAnchor) {
+                // Collapsed back onto the anchor: no visible selection, but keep
+                // the anchor so further shift+arrows continue from here.
+                this.selectionStart = null;
+                this.selectionEnd = null;
+            } else {
+                this.selectionStart = Math.min(this.selectionAnchor, focus);
+                this.selectionEnd = Math.max(this.selectionAnchor, focus);
+            }
+        }
+
+        shiftLeftArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.moveCursorLeftOneChar();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftRightArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.moveCursorRightOneChar();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftUpArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.upArrowPressed();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftDownArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.downArrowPressed();
+            this.updateSelectionFromAnchor();
         }
 
         enterPressed() {
@@ -1005,6 +1074,7 @@
         clearSelection() {
             this.selectionStart = null;
             this.selectionEnd = null;
+            this.selectionAnchor = null;
         }
 
         hasSelection() {
@@ -1327,23 +1397,39 @@
                 this.render();
             } else if (key === 'ArrowLeft') {
                 e.preventDefault();
-                // leftArrowPressed handles selection internally
-                this.chain.leftArrowPressed();
+                // Shift extends the selection; otherwise plain cursor movement
+                // (which collapses any existing selection internally).
+                if (e.shiftKey) {
+                    this.chain.shiftLeftArrowPressed();
+                } else {
+                    this.chain.leftArrowPressed();
+                }
                 this.render();
             } else if (key === 'ArrowRight') {
                 e.preventDefault();
-                // rightArrowPressed handles selection internally
-                this.chain.rightArrowPressed();
+                if (e.shiftKey) {
+                    this.chain.shiftRightArrowPressed();
+                } else {
+                    this.chain.rightArrowPressed();
+                }
                 this.render();
             } else if (key === 'ArrowUp') {
                 e.preventDefault();
-                this.chain.clearSelection();
-                this.chain.upArrowPressed();
+                if (e.shiftKey) {
+                    this.chain.shiftUpArrowPressed();
+                } else {
+                    this.chain.clearSelection();
+                    this.chain.upArrowPressed();
+                }
                 this.render();
             } else if (key === 'ArrowDown') {
                 e.preventDefault();
-                this.chain.clearSelection();
-                this.chain.downArrowPressed();
+                if (e.shiftKey) {
+                    this.chain.shiftDownArrowPressed();
+                } else {
+                    this.chain.clearSelection();
+                    this.chain.downArrowPressed();
+                }
                 this.render();
             } else if (key.length === 1 && !ctrl) {
                 // Printable character - prevent default to stop page scrolling

@@ -220,23 +220,39 @@ export class CanvasEditor {
             this.render();
         } else if (key === 'ArrowLeft') {
             e.preventDefault();
-            // leftArrowPressed handles selection internally
-            this.chain.leftArrowPressed();
+            // Shift extends the selection; otherwise plain cursor movement
+            // (which collapses any existing selection internally).
+            if (e.shiftKey) {
+                this.chain.shiftLeftArrowPressed();
+            } else {
+                this.chain.leftArrowPressed();
+            }
             this.render();
         } else if (key === 'ArrowRight') {
             e.preventDefault();
-            // rightArrowPressed handles selection internally
-            this.chain.rightArrowPressed();
+            if (e.shiftKey) {
+                this.chain.shiftRightArrowPressed();
+            } else {
+                this.chain.rightArrowPressed();
+            }
             this.render();
         } else if (key === 'ArrowUp') {
             e.preventDefault();
-            this.chain.clearSelection();
-            this.chain.upArrowPressed();
+            if (e.shiftKey) {
+                this.chain.shiftUpArrowPressed();
+            } else {
+                this.chain.clearSelection();
+                this.chain.upArrowPressed();
+            }
             this.render();
         } else if (key === 'ArrowDown') {
             e.preventDefault();
-            this.chain.clearSelection();
-            this.chain.downArrowPressed();
+            if (e.shiftKey) {
+                this.chain.shiftDownArrowPressed();
+            } else {
+                this.chain.clearSelection();
+                this.chain.downArrowPressed();
+            }
             this.render();
         } else if (key.length === 1 && !ctrl) {
             // Printable character - prevent default to stop page scrolling
