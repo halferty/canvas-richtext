@@ -2360,9 +2360,14 @@
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
-            // Resizing the selected image by dragging a handle.
+            // Resizing the selected image by dragging a handle. The top/bottom edge
+            // handles drive height; all others drive width.
             if (this._imageResizeHandle) {
-                this.resizeSelectedImageToWidth(this.imageResizeWidthFromPointer(x));
+                if (this._imageResizeHandle === 'n' || this._imageResizeHandle === 's') {
+                    this.resizeSelectedImageToHeight(this.imageResizeHeightFromPointer(y));
+                } else {
+                    this.resizeSelectedImageToWidth(this.imageResizeWidthFromPointer(x));
+                }
                 return;
             }
 
@@ -3765,18 +3770,28 @@
             }
         }
 
-        // Square resize handles at the four corners of an image's box, in
-        // content space. Returns null when the image has no laid-out box.
+        // Square resize handles at the four corners and four edge midpoints of an
+        // image's box, in content space. Returns null when it has no laid-out box.
         getImageHandles(image) {
             const b = image && image.computed && image.computed.box;
             if (!b) return null;
             const s = this.imageHandleSize;
             const half = s / 2;
+            const left = b.x - half;
+            const right = b.x + b.w - half;
+            const midX = b.x + b.w / 2 - half;
+            const top = b.y - half;
+            const bottom = b.y + b.h - half;
+            const midY = b.y + b.h / 2 - half;
             return {
-                nw: { x: b.x - half, y: b.y - half, w: s, h: s },
-                ne: { x: b.x + b.w - half, y: b.y - half, w: s, h: s },
-                sw: { x: b.x - half, y: b.y + b.h - half, w: s, h: s },
-                se: { x: b.x + b.w - half, y: b.y + b.h - half, w: s, h: s }
+                nw: { x: left, y: top, w: s, h: s },
+                n: { x: midX, y: top, w: s, h: s },
+                ne: { x: right, y: top, w: s, h: s },
+                e: { x: right, y: midY, w: s, h: s },
+                se: { x: right, y: bottom, w: s, h: s },
+                s: { x: midX, y: bottom, w: s, h: s },
+                sw: { x: left, y: bottom, w: s, h: s },
+                w: { x: left, y: midY, w: s, h: s }
             };
         }
 
@@ -3821,6 +3836,23 @@
             if (align === 'left') return x;
             if (align === 'right') return this.editorWidth - x;
             return Math.abs(x - this.editorWidth / 2) * 2;
+        }
+
+        // Resize by height (top edge anchored), preserving aspect ratio. Used by
+        // the top/bottom edge handles; reuses the width clamp via the aspect ratio.
+        resizeSelectedImageToHeight(targetHeight) {
+            const image = this.selectedImage;
+            if (!image) return;
+            const aspect = (image.intrinsic.width || 1) / (image.intrinsic.height || 1);
+            this.resizeSelectedImageToWidth(targetHeight * aspect);
+        }
+
+        // Target height implied by a pointer Y for the selected image. The image's
+        // top is the layout anchor, so the height tracks the pointer below it.
+        imageResizeHeightFromPointer(y) {
+            const b = this.selectedImage && this.selectedImage.computed && this.selectedImage.computed.box;
+            if (!b) return 0;
+            return y - b.y;
         }
 
         // Set the selected image's justification: 'left' | 'center' | 'right'.

@@ -136,19 +136,26 @@ describe('Images', () => {
             assert.ok(editor.selectedImage instanceof ImageLink);
         });
 
-        it('should expose four corner handles for the selected image', () => {
+        it('should expose eight handles (corners + edge midpoints)', () => {
             const editor = freshWithImage();
             const handles = editor.getImageHandles(editor.selectedImage);
-            assert.deepStrictEqual(Object.keys(handles).sort(), ['ne', 'nw', 'se', 'sw']);
+            assert.deepStrictEqual(
+                Object.keys(handles).sort(),
+                ['e', 'n', 'ne', 'nw', 's', 'se', 'sw', 'w']
+            );
             // se handle is near the bottom-right corner of the box.
             const b = editor.selectedImage.computed.box;
             assert.ok(Math.abs(handles.se.x - (b.x + b.w)) <= editor.imageHandleSize);
+            // e (right-edge) handle sits at the vertical middle of the box.
+            assert.ok(Math.abs(handles.e.y - (b.y + b.h / 2)) <= editor.imageHandleSize);
         });
 
-        it('should hit-test handles and the image body', () => {
+        it('should hit-test corner, edge, and body regions', () => {
             const editor = freshWithImage();
             const b = editor.selectedImage.computed.box;
             assert.strictEqual(editor.imageHandleAt(b.x + b.w, b.y + b.h), 'se');
+            assert.strictEqual(editor.imageHandleAt(b.x + b.w, b.y + b.h / 2), 'e');
+            assert.strictEqual(editor.imageHandleAt(b.x + b.w / 2, b.y), 'n');
             assert.strictEqual(editor.imageHandleAt(b.x + b.w / 2, b.y + b.h / 2), null);
         });
 
@@ -157,6 +164,13 @@ describe('Images', () => {
             editor.resizeSelectedImageToWidth(200); // was 400x200 (2:1)
             assert.strictEqual(editor.selectedImage.intrinsic.width, 200);
             assert.strictEqual(editor.selectedImage.intrinsic.height, 100);
+        });
+
+        it('should resize by height (top/bottom handles), preserving aspect ratio', () => {
+            const editor = freshWithImage(); // 400x200 (2:1)
+            editor.resizeSelectedImageToHeight(50);
+            assert.strictEqual(editor.selectedImage.intrinsic.height, 50);
+            assert.strictEqual(editor.selectedImage.intrinsic.width, 100);
         });
 
         it('should clamp resize to the content width', () => {
