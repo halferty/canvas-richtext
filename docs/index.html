@@ -543,6 +543,7 @@
                     <button id="bullet-list-btn" class="format-btn" title="Bulleted list">• List</button>
                     <button id="numbered-list-btn" class="format-btn" title="Numbered list">1. List</button>
                     <button id="horizontal-rule-btn" class="format-btn" title="Insert horizontal rule">― Rule</button>
+                    <button id="link-btn" class="format-btn" title="Insert/edit link">🔗 Link</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -1061,6 +1062,10 @@ Type away and explore the features...`;
             editor.insertHorizontalRule();
             canvas.focus({ preventScroll: true });
             updateToolbar();
+        });
+
+        document.getElementById('link-btn').addEventListener('click', () => {
+            editor.openLinkPopup();
         });
 
         // Text color control

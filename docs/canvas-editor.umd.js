@@ -1396,7 +1396,7 @@
     class FontProperties {
         constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
                     underline = false, strikethrough = false, superscript = false, subscript = false,
-                    color = '#000000', backgroundColor = null) {
+                    color = '#000000', backgroundColor = null, link = null) {
             this.size = size;
             this.family = family;
             this.weight = weight;
@@ -1408,6 +1408,8 @@
             this.color = color;
             // Highlight color drawn behind the glyphs. null means no highlight.
             this.backgroundColor = backgroundColor;
+            // Hyperlink target (URL). null means the run is not a link.
+            this.link = link;
         }
 
         doPropertiesMatch(other) {
@@ -1420,13 +1422,14 @@
                    this.superscript === other.superscript &&
                    this.subscript === other.subscript &&
                    this.color === other.color &&
-                   this.backgroundColor === other.backgroundColor;
+                   this.backgroundColor === other.backgroundColor &&
+                   this.link === other.link;
         }
 
         clone() {
             return new FontProperties(this.size, this.family, this.weight, this.style,
                                        this.underline, this.strikethrough, this.superscript, this.subscript,
-                                       this.color, this.backgroundColor);
+                                       this.color, this.backgroundColor, this.link);
         }
 
         toFontString() {
@@ -1445,7 +1448,8 @@
                 superscript: this.superscript,
                 subscript: this.subscript,
                 color: this.color,
-                backgroundColor: this.backgroundColor
+                backgroundColor: this.backgroundColor,
+                link: this.link
             };
         }
 
@@ -1464,7 +1468,8 @@
                 obj.superscript ?? d.superscript,
                 obj.subscript ?? d.subscript,
                 obj.color ?? d.color,
-                obj.backgroundColor ?? d.backgroundColor
+                obj.backgroundColor ?? d.backgroundColor,
+                obj.link ?? d.link
             );
         }
 
@@ -2026,6 +2031,7 @@
 
         handleMouseDown(e) {
             const rect = this.canvas.getBoundingClientRect();
+            let openLinkPopupAfterRender = false;
 
             // Scrollbar interaction takes precedence over text positioning.
             if (this.startScrollbarDragIfHit(e.clientX - rect.left, e.clientY - rect.top)) {
@@ -2083,6 +2089,17 @@
                 this.chain.clearSelection();
                 this.chain.clicked(x, y);
                 console.log('Single click - cursor repositioned');
+
+                // If the click landed inside a link, either follow it
+                // (Ctrl/Cmd-click) or surface the link editor.
+                const href = this.getLinkAtCursor();
+                if (href) {
+                    if (e.metaKey || e.ctrlKey) {
+                        this.openLink(href);
+                    } else {
+                        openLinkPopupAfterRender = true;
+                    }
+                }
             }
 
             this.render();
@@ -2092,6 +2109,12 @@
 
             // Focus the canvas
             this.canvas.focus();
+
+            // Open the link editor after the canvas regains focus so the popup's
+            // URL field keeps focus.
+            if (openLinkPopupAfterRender) {
+                this.openLinkPopup();
+            }
         }
 
         handleMouseMove(e) {
@@ -2862,12 +2885,19 @@
                 this.ctx.fillRect(posX, posY - ascent, textWidth, ascent + descent);
             }
 
-            this.ctx.fillStyle = fontProps.color || '#000000';
+            // Link runs render in the link color and are always underlined,
+            // overriding the run's own text color.
+            const isLink = !!fontProps.link;
+            const drawColor = isLink
+                ? (this.options.linkColor || '#1a0dab')
+                : (fontProps.color || '#000000');
+
+            this.ctx.fillStyle = drawColor;
             this.ctx.fillText(textLink.text, posX, posY);
 
-            // Draw underline
-            if (fontProps.underline) {
-                this.ctx.strokeStyle = fontProps.color || '#000000';
+            // Draw underline (explicit underline, or implied by a link)
+            if (fontProps.underline || isLink) {
+                this.ctx.strokeStyle = drawColor;
                 this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
                 this.ctx.beginPath();
                 const underlineY = posY + fontSize * 0.1;
@@ -3243,6 +3273,287 @@
             this.chain.insertHorizontalRule();
             this.scrollToCursorOnNextRender = true;
             this.render();
+        }
+
+        // --- Hyperlinks -------------------------------------------------------
+
+        // The actual FontProperties active at the cursor (cloneable), as opposed
+        // to getFontAtCursor() which returns a plain display subset.
+        getFontPropertiesAtCursor() {
+            const items = this.chain.getItems();
+            const cursorIdx = this.chain.cursorIdx();
+            for (let i = cursorIdx - 1; i >= 0; i--) {
+                if (items[i] instanceof TextLink) {
+                    return items[i].intrinsic.fontProperties.clone();
+                }
+            }
+            return this.chain.currentFontProperties.clone();
+        }
+
+        // Extract the plain text within a flattened [start, end) range.
+        getTextInRange(start, end) {
+            const items = this.chain.getItems();
+            let pos = 0;
+            let out = '';
+            for (const item of items) {
+                if (item instanceof TextLink) {
+                    const s = Math.max(0, start - pos);
+                    const e = Math.min(item.text.length, end - pos);
+                    if (e > s) out += item.text.substring(s, e);
+                    pos += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    if (pos >= start && pos < end) out += '\n';
+                    pos += 1;
+                }
+            }
+            return out;
+        }
+
+        // The contiguous link run at the cursor, or null. Expands across adjacent
+        // runs (e.g. chunked words) that share the exact same href.
+        getLinkRangeAtCursor() {
+            const items = this.chain.getItems();
+            const links = [];
+            for (const item of items) {
+                if (item instanceof TextLink) {
+                    for (let i = 0; i < item.text.length; i++) {
+                        links.push(item.intrinsic.fontProperties.link || null);
+                    }
+                } else if (item instanceof NewlineLink) {
+                    links.push(null);
+                }
+            }
+
+            const cursorPos = this.chain.getCursorCharPosition();
+            // Prefer the link of the character before the cursor, then the one
+            // after it (matches how formatting-at-cursor is usually resolved).
+            let idx = cursorPos - 1;
+            let href = (idx >= 0 && idx < links.length) ? links[idx] : null;
+            if (!href) {
+                idx = cursorPos;
+                href = (idx >= 0 && idx < links.length) ? links[idx] : null;
+            }
+            if (!href) return null;
+
+            let start = idx;
+            let end = idx + 1;
+            while (start > 0 && links[start - 1] === href) start--;
+            while (end < links.length && links[end] === href) end++;
+            return { href, start, end, text: this.getTextInRange(start, end) };
+        }
+
+        // The href at the cursor, or null when the cursor is not within a link.
+        getLinkAtCursor() {
+            const range = this.getLinkRangeAtCursor();
+            return range ? range.href : null;
+        }
+
+        // Insert text carrying the given FontProperties at the cursor.
+        insertTextWithProperties(text, props) {
+            const saved = this.chain.currentFontProperties;
+            this.chain.currentFontProperties = props;
+            for (const ch of text) {
+                if (ch === '\n') {
+                    this.chain.enterPressed();
+                } else {
+                    this.chain.printableKeyPressed(ch);
+                }
+            }
+            this.chain.currentFontProperties = saved;
+        }
+
+        // Set (or clear, when url is falsy) the link on the current selection,
+        // preserving the existing text and per-character formatting.
+        setLink(url) {
+            if (!this.chain.hasSelection()) return;
+            this.takeSnapshot();
+            this.applyFormattingToSelection('link', () => url || null);
+            this.render();
+        }
+
+        // Remove the link from the link run at the cursor, keeping its text.
+        removeLink() {
+            const range = this.getLinkRangeAtCursor();
+            if (!range) return;
+            this.takeSnapshot();
+            this.chain.selectionStart = range.start;
+            this.chain.selectionEnd = range.end;
+            this.applyFormattingToSelection('link', () => null);
+            this.chain.clearSelection();
+            this.render();
+        }
+
+        // Create or update a link with explicit display text and URL. Replaces the
+        // existing link run at the cursor (if any), otherwise the current
+        // selection, otherwise inserts at the cursor. An empty url clears the link
+        // while keeping the text.
+        applyLink(text, url) {
+            this.takeSnapshot();
+            const href = url ? url : null;
+
+            const existing = this.getLinkRangeAtCursor();
+            let start;
+            let end;
+            if (existing) {
+                start = existing.start;
+                end = existing.end;
+            } else if (this.chain.hasSelection()) {
+                start = this.chain.selectionStart;
+                end = this.chain.selectionEnd;
+            } else {
+                start = end = this.chain.getCursorCharPosition();
+            }
+
+            const props = this.getFontPropertiesAtCursor();
+            props.link = href;
+
+            if (end > start) {
+                this.chain.deleteCharRange(start, end);
+            }
+            if (text && text.length > 0) {
+                this.insertTextWithProperties(text, props);
+            }
+            this.chain.clearSelection();
+            this.render();
+        }
+
+        // Open a link URL in a new tab (browser only).
+        openLink(href) {
+            if (href && typeof window !== 'undefined' && typeof window.open === 'function') {
+                window.open(href, '_blank', 'noopener');
+            }
+        }
+
+        // Lazily build the link-editing overlay (a real DOM element). Returns null
+        // in non-browser environments so the data API stays usable in Node.
+        ensureLinkPopup() {
+            if (typeof document === 'undefined') return null;
+            if (this.linkPopup) return this.linkPopup;
+
+            const el = document.createElement('div');
+            el.className = 'canvas-richtext-link-popup';
+            Object.assign(el.style, {
+                position: 'absolute',
+                display: 'none',
+                zIndex: '10000',
+                background: '#ffffff',
+                border: '1px solid #ccc',
+                borderRadius: '6px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+                padding: '8px',
+                font: '13px sans-serif',
+                width: '240px',
+                boxSizing: 'border-box'
+            });
+            const inputStyle = 'width:100%;box-sizing:border-box;padding:4px;margin-top:2px;border:1px solid #ccc;border-radius:4px;';
+            el.innerHTML =
+                '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                '<label style="display:flex;flex-direction:column;font-size:11px;color:#555;">Text' +
+                '<input type="text" class="crt-link-text" style="' + inputStyle + '"></label>' +
+                '<label style="display:flex;flex-direction:column;font-size:11px;color:#555;">URL' +
+                '<input type="text" class="crt-link-url" placeholder="https://" style="' + inputStyle + '"></label>' +
+                '<div style="display:flex;gap:6px;justify-content:flex-end;">' +
+                '<button type="button" class="crt-link-open">Open</button>' +
+                '<button type="button" class="crt-link-remove">Remove</button>' +
+                '<button type="button" class="crt-link-cancel">Cancel</button>' +
+                '<button type="button" class="crt-link-apply">Apply</button>' +
+                '</div></div>';
+
+            const textInput = el.querySelector('.crt-link-text');
+            const urlInput = el.querySelector('.crt-link-url');
+
+            el.querySelector('.crt-link-apply').addEventListener('click', () => {
+                const url = urlInput.value.trim();
+                const text = textInput.value.length > 0 ? textInput.value : url;
+                this.applyLink(text, url);
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-cancel').addEventListener('click', () => {
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-remove').addEventListener('click', () => {
+                this.removeLink();
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-open').addEventListener('click', () => {
+                this.openLink(urlInput.value.trim());
+            });
+            // Keep clicks inside the popup from reaching the canvas (which would
+            // reposition the cursor or dismiss the popup).
+            el.addEventListener('mousedown', (e) => e.stopPropagation());
+
+            document.body.appendChild(el);
+            this.linkPopup = el;
+            this.linkPopupText = textInput;
+            this.linkPopupUrl = urlInput;
+            return el;
+        }
+
+        // Open the link editor, seeded from the link at the cursor, the current
+        // selection, or empty. Positioned over the canvas near the cursor.
+        openLinkPopup() {
+            const el = this.ensureLinkPopup();
+            if (!el) return;
+
+            const existing = this.getLinkRangeAtCursor();
+            let text = '';
+            let url = '';
+            if (existing) {
+                text = existing.text;
+                url = existing.href;
+            } else if (this.chain.hasSelection()) {
+                text = this.getTextInRange(this.chain.selectionStart, this.chain.selectionEnd);
+            }
+
+            this.linkPopupText.value = text;
+            this.linkPopupUrl.value = url;
+            el.style.display = 'block';
+            this.positionLinkPopup();
+            this.linkPopupUrl.focus();
+        }
+
+        closeLinkPopup() {
+            if (this.linkPopup) this.linkPopup.style.display = 'none';
+        }
+
+        // Place the popup near the cursor, flipping/clamping to stay within the
+        // canvas bounds (below the line by default, above if it would overflow).
+        positionLinkPopup() {
+            const el = this.linkPopup;
+            if (!el || typeof window === 'undefined' || !this.canvas.getBoundingClientRect) return;
+
+            const rect = this.canvas.getBoundingClientRect();
+            const cursor = this.chain.getCursor();
+            const cx = (cursor.computed && cursor.computed.posX) || 0;
+            const cy = (cursor.computed && cursor.computed.posY) || 0;
+
+            const originX = rect.left + (window.scrollX || 0);
+            const originY = rect.top + (window.scrollY || 0);
+
+            const pw = el.offsetWidth || 240;
+            const ph = el.offsetHeight || 110;
+
+            let left = originX + this.options.padding + cx;
+            let top = originY + this.options.padding + cy - this.scrollY + 6;
+
+            // Clamp horizontally within the canvas.
+            const minLeft = originX;
+            const maxLeft = originX + this.canvas.width - pw;
+            if (left > maxLeft) left = maxLeft;
+            if (left < minLeft) left = minLeft;
+
+            // Flip above the line if the popup would overflow the canvas bottom.
+            const canvasBottom = originY + this.canvas.height;
+            if (top + ph > canvasBottom) {
+                top = top - ph - 12 - 6;
+            }
+            if (top < originY) top = originY;
+
+            el.style.left = `${left}px`;
+            el.style.top = `${top}px`;
         }
 
         toggleCenterAlign() {
@@ -3773,6 +4084,12 @@
             this.canvas.removeEventListener('touchstart', this.boundHandleTouchStart);
             this.canvas.removeEventListener('touchmove', this.boundHandleTouchMove);
             this.canvas.removeEventListener('touchend', this.boundHandleTouchEnd);
+
+            // Remove the link-editor overlay if one was created.
+            if (this.linkPopup && this.linkPopup.parentNode) {
+                this.linkPopup.parentNode.removeChild(this.linkPopup);
+                this.linkPopup = null;
+            }
         }
 
         // Debug method to dump full editor state

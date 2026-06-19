@@ -4,7 +4,7 @@
 export class FontProperties {
     constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
                 underline = false, strikethrough = false, superscript = false, subscript = false,
-                color = '#000000', backgroundColor = null) {
+                color = '#000000', backgroundColor = null, link = null) {
         this.size = size;
         this.family = family;
         this.weight = weight;
@@ -16,6 +16,8 @@ export class FontProperties {
         this.color = color;
         // Highlight color drawn behind the glyphs. null means no highlight.
         this.backgroundColor = backgroundColor;
+        // Hyperlink target (URL). null means the run is not a link.
+        this.link = link;
     }
 
     doPropertiesMatch(other) {
@@ -28,13 +30,14 @@ export class FontProperties {
                this.superscript === other.superscript &&
                this.subscript === other.subscript &&
                this.color === other.color &&
-               this.backgroundColor === other.backgroundColor;
+               this.backgroundColor === other.backgroundColor &&
+               this.link === other.link;
     }
 
     clone() {
         return new FontProperties(this.size, this.family, this.weight, this.style,
                                    this.underline, this.strikethrough, this.superscript, this.subscript,
-                                   this.color, this.backgroundColor);
+                                   this.color, this.backgroundColor, this.link);
     }
 
     toFontString() {
@@ -53,7 +56,8 @@ export class FontProperties {
             superscript: this.superscript,
             subscript: this.subscript,
             color: this.color,
-            backgroundColor: this.backgroundColor
+            backgroundColor: this.backgroundColor,
+            link: this.link
         };
     }
 
@@ -72,7 +76,8 @@ export class FontProperties {
             obj.superscript ?? d.superscript,
             obj.subscript ?? d.subscript,
             obj.color ?? d.color,
-            obj.backgroundColor ?? d.backgroundColor
+            obj.backgroundColor ?? d.backgroundColor,
+            obj.link ?? d.link
         );
     }
 
