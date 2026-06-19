@@ -1342,6 +1342,90 @@
             return { itemIdx: this.items.length - 1, charOffset: 0 };
         }
 
+        // Resolve a content-space (x, y) to a flattened character position, with
+        // line-aware fallback when the point is in a list's left gutter, past the
+        // end of a line, or on an empty line. Used for click and drag-selection
+        // hit testing so indented lines resolve to the correct character.
+        charPositionAtXY(x, y) {
+            const items = this.items;
+
+            // 1) Direct hit on a text run.
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item instanceof TextLink && item.clickHits(this.ctx, x, y)) {
+                    return this.getCharPosition(i, item.getCharIdxFromX(this.ctx, x));
+                }
+            }
+
+            // 2) Otherwise pick the visual line (distinct posY) nearest the clicked
+            //    Y. Both text runs and newlines carry a posY for their line.
+            let bestPosY = null;
+            let bestDist = Infinity;
+            for (const item of items) {
+                if ((item instanceof TextLink || item instanceof NewlineLink) &&
+                    item.computed && typeof item.computed.posY === 'number') {
+                    const d = Math.abs(y - item.computed.posY);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestPosY = item.computed.posY;
+                    }
+                }
+            }
+            if (bestPosY === null) return 0; // empty document
+
+            // Text runs on the chosen line, and that line's X bounds.
+            let firstTextIdx = -1;
+            let lastTextIdx = -1;
+            let firstStartX = Infinity;
+            let lastEndX = -Infinity;
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item instanceof TextLink && item.computed && item.computed.posY === bestPosY) {
+                    if (firstTextIdx === -1) firstTextIdx = i;
+                    lastTextIdx = i;
+                    const startX = item.computed.posX;
+                    const endX = startX + item.measureText(this.ctx).width;
+                    if (startX < firstStartX) firstStartX = startX;
+                    if (endX > lastEndX) lastEndX = endX;
+                }
+            }
+
+            // Empty line (no text runs): a newline's posY is the *next* line's
+            // baseline, so the newline carrying this line's Y is the one that
+            // terminates the previous line; the empty line begins just after it.
+            if (firstTextIdx === -1) {
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i] instanceof NewlineLink && items[i].computed &&
+                        items[i].computed.posY === bestPosY) {
+                        return this.getCharPosition(i, 0) + 1;
+                    }
+                }
+                return this.getTotalChars();
+            }
+
+            // Left of the line's text (e.g. list gutter) → start of line.
+            if (x <= firstStartX) {
+                return this.getCharPosition(firstTextIdx, 0);
+            }
+            // Right of the line's text → end of line.
+            if (x >= lastEndX) {
+                return this.getCharPosition(lastTextIdx, items[lastTextIdx].text.length);
+            }
+
+            // Within the line: find the run containing x.
+            for (let i = firstTextIdx; i <= lastTextIdx; i++) {
+                const item = items[i];
+                if (!(item instanceof TextLink) || !item.computed || item.computed.posY !== bestPosY) continue;
+                const startX = item.computed.posX;
+                const endX = startX + item.measureText(this.ctx).width;
+                if (x >= startX && x <= endX) {
+                    return this.getCharPosition(i, item.getCharIdxFromX(this.ctx, x));
+                }
+            }
+            // Between runs → end of line.
+            return this.getCharPosition(lastTextIdx, items[lastTextIdx].text.length);
+        }
+
         setSelection(startItemIdx, startCharOffset, endItemIdx, endCharOffset) {
             this.selectionStart = this.getCharPosition(startItemIdx, startCharOffset);
             this.selectionEnd = this.getCharPosition(endItemIdx, endCharOffset);
@@ -1770,11 +1854,19 @@
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 }
-                // Split the current paragraph and carry its list/alignment onto the
-                // new line (auto-continue), shifting following paragraphs.
                 const splitPara = this.getCurrentParagraphIndex();
-                this.remapAroundEdit(() => this.chain.enterPressed());
-                this.continueParagraphAttributes(splitPara);
+                if (this.paragraphLists.has(splitPara) && this.isParagraphEmpty(splitPara)) {
+                    // Enter on an empty list item exits the list (removes the bullet
+                    // and indent) rather than adding another empty item.
+                    this.paragraphLists.delete(splitPara);
+                    this.syncParagraphIndents();
+                    this.chain.recalc();
+                } else {
+                    // Split the current paragraph and carry its list/alignment onto
+                    // the new line (auto-continue), shifting following paragraphs.
+                    this.remapAroundEdit(() => this.chain.enterPressed());
+                    this.continueParagraphAttributes(splitPara);
+                }
                 this.render();
             } else if (key === 'ArrowLeft') {
                 e.preventDefault();
@@ -2274,23 +2366,16 @@
         // Helper to find character position at x, y coordinates
         getCharacterAtPosition(x, y) {
             const items = this.chain.getItems();
-            
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                if (item instanceof TextLink && item.clickHits(this.ctx, x, y)) {
-                    const charOffset = item.getCharIdxFromX(this.ctx, x);
-                    return { itemIdx: i, charOffset };
-                }
+
+            // No text at all: keep the previous "nothing to select" behavior.
+            if (!items.some(item => item instanceof TextLink)) {
+                return null;
             }
-            
-            // If not found, return end of document
-            for (let i = items.length - 1; i >= 0; i--) {
-                if (items[i] instanceof TextLink) {
-                    return { itemIdx: i, charOffset: items[i].text.length };
-                }
-            }
-            
-            return null;
+
+            // Line-aware resolution handles clicks in a list's gutter, past the end
+            // of a line, and on empty lines (where no text run is directly hit).
+            const pos = this.chain.charPositionAtXY(x, y);
+            return this.chain.getItemFromCharPosition(pos);
         }
 
         selectWord(pos) {
@@ -3191,6 +3276,21 @@
             }
 
             return paragraphIndex;
+        }
+
+        // True when the paragraph at the given index contains no text characters.
+        isParagraphEmpty(paragraphIndex) {
+            const items = this.chain.getItems();
+            let para = 0;
+            for (const item of items) {
+                if (item instanceof NewlineLink) {
+                    if (para === paragraphIndex) return true;
+                    para++;
+                } else if (item instanceof TextLink) {
+                    if (para === paragraphIndex && item.text.length > 0) return false;
+                }
+            }
+            return para === paragraphIndex;
         }
 
         setAlignment(alignment) {

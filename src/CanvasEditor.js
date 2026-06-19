@@ -269,11 +269,19 @@ export class CanvasEditor {
             if (this.chain.hasSelection()) {
                 this.deleteSelection();
             }
-            // Split the current paragraph and carry its list/alignment onto the
-            // new line (auto-continue), shifting following paragraphs.
             const splitPara = this.getCurrentParagraphIndex();
-            this.remapAroundEdit(() => this.chain.enterPressed());
-            this.continueParagraphAttributes(splitPara);
+            if (this.paragraphLists.has(splitPara) && this.isParagraphEmpty(splitPara)) {
+                // Enter on an empty list item exits the list (removes the bullet
+                // and indent) rather than adding another empty item.
+                this.paragraphLists.delete(splitPara);
+                this.syncParagraphIndents();
+                this.chain.recalc();
+            } else {
+                // Split the current paragraph and carry its list/alignment onto
+                // the new line (auto-continue), shifting following paragraphs.
+                this.remapAroundEdit(() => this.chain.enterPressed());
+                this.continueParagraphAttributes(splitPara);
+            }
             this.render();
         } else if (key === 'ArrowLeft') {
             e.preventDefault();
@@ -773,23 +781,16 @@ export class CanvasEditor {
     // Helper to find character position at x, y coordinates
     getCharacterAtPosition(x, y) {
         const items = this.chain.getItems();
-        
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item instanceof TextLink && item.clickHits(this.ctx, x, y)) {
-                const charOffset = item.getCharIdxFromX(this.ctx, x);
-                return { itemIdx: i, charOffset };
-            }
+
+        // No text at all: keep the previous "nothing to select" behavior.
+        if (!items.some(item => item instanceof TextLink)) {
+            return null;
         }
-        
-        // If not found, return end of document
-        for (let i = items.length - 1; i >= 0; i--) {
-            if (items[i] instanceof TextLink) {
-                return { itemIdx: i, charOffset: items[i].text.length };
-            }
-        }
-        
-        return null;
+
+        // Line-aware resolution handles clicks in a list's gutter, past the end
+        // of a line, and on empty lines (where no text run is directly hit).
+        const pos = this.chain.charPositionAtXY(x, y);
+        return this.chain.getItemFromCharPosition(pos);
     }
 
     selectWord(pos) {
@@ -1695,6 +1696,21 @@ export class CanvasEditor {
         }
 
         return paragraphIndex;
+    }
+
+    // True when the paragraph at the given index contains no text characters.
+    isParagraphEmpty(paragraphIndex) {
+        const items = this.chain.getItems();
+        let para = 0;
+        for (const item of items) {
+            if (item instanceof NewlineLink) {
+                if (para === paragraphIndex) return true;
+                para++;
+            } else if (item instanceof TextLink) {
+                if (para === paragraphIndex && item.text.length > 0) return false;
+            }
+        }
+        return para === paragraphIndex;
     }
 
     setAlignment(alignment) {
