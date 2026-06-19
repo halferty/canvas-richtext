@@ -545,6 +545,12 @@
                 </div>
 
                 <div class="toolbar-group">
+                    <label for="highlight-color">Highlight:</label>
+                    <input type="color" id="highlight-color" value="#ffff00" title="Apply highlight color">
+                    <button id="clear-highlight-btn" class="format-btn" title="Remove highlight">✕</button>
+                </div>
+
+                <div class="toolbar-group">
                     <label for="font-size">Font Size:</label>
                     <button id="decrease-font-btn" class="format-btn" title="Decrease font size">-</button>
                     <select id="font-size">
@@ -586,6 +592,8 @@
                 <button id="clear-formatting-btn" class="format-btn" title="Clear formatting">Clear Format</button>
                 <button id="clear-btn">Clear</button>
                 <button id="sample-text-btn">Load Sample Text</button>
+                <button id="save-btn" title="Save document to browser storage">💾 Save</button>
+                <button id="load-btn" title="Load saved document">📂 Load</button>
                 <button id="find-btn">Find</button>
                 <button id="find-replace-btn">Find & Replace</button>
             </div>
@@ -922,6 +930,8 @@ Type away and explore the features...`;
         const alignCenterBtn = document.getElementById('align-center-btn');
         const alignRightBtn = document.getElementById('align-right-btn');
         const textColorInput = document.getElementById('text-color');
+        const highlightColorInput = document.getElementById('highlight-color');
+        const clearHighlightBtn = document.getElementById('clear-highlight-btn');
         const fontSizeSelect = document.getElementById('font-size');
         const increaseFontBtn = document.getElementById('increase-font-btn');
         const decreaseFontBtn = document.getElementById('decrease-font-btn');
@@ -940,6 +950,9 @@ Type away and explore the features...`;
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
             textColorInput.value = fontAtCursor.color || '#000000';
+            if (fontAtCursor.backgroundColor) {
+                highlightColorInput.value = fontAtCursor.backgroundColor;
+            }
             lineSpacingSelect.value = editor.getLineSpacing();
 
             // Update formatting button active states
@@ -1032,6 +1045,19 @@ Type away and explore the features...`;
             updateToolbar();
         });
 
+        // Highlight color controls
+        highlightColorInput.addEventListener('input', (e) => {
+            editor.setHighlightColor(e.target.value);
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        clearHighlightBtn.addEventListener('click', () => {
+            editor.setHighlightColor(null);
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
         // Font controls
         fontSizeSelect.addEventListener('change', (e) => {
             editor.setFontSize(parseInt(e.target.value));
@@ -1077,6 +1103,24 @@ Type away and explore the features...`;
         document.getElementById('sample-text-btn').addEventListener('click', () => {
             editor.setText(welcomeText);
             updateToolbar();
+        });
+
+        // Save the full formatted document to localStorage via toJSON()
+        document.getElementById('save-btn').addEventListener('click', () => {
+            localStorage.setItem('canvas-richtext-demo', JSON.stringify(editor.toJSON()));
+            canvas.focus({ preventScroll: true });
+        });
+
+        // Restore the document via fromJSON()
+        document.getElementById('load-btn').addEventListener('click', () => {
+            const saved = localStorage.getItem('canvas-richtext-demo');
+            if (saved) {
+                editor.fromJSON(saved);
+                updateToolbar();
+            } else {
+                alert('No saved document found. Click "Save" first.');
+            }
+            canvas.focus({ preventScroll: true });
         });
 
         document.getElementById('find-btn').addEventListener('click', () => {

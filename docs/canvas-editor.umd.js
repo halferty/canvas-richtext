@@ -1349,7 +1349,7 @@
     class FontProperties {
         constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
                     underline = false, strikethrough = false, superscript = false, subscript = false,
-                    color = '#000000') {
+                    color = '#000000', backgroundColor = null) {
             this.size = size;
             this.family = family;
             this.weight = weight;
@@ -1359,6 +1359,8 @@
             this.superscript = superscript;
             this.subscript = subscript;
             this.color = color;
+            // Highlight color drawn behind the glyphs. null means no highlight.
+            this.backgroundColor = backgroundColor;
         }
 
         doPropertiesMatch(other) {
@@ -1370,17 +1372,53 @@
                    this.strikethrough === other.strikethrough &&
                    this.superscript === other.superscript &&
                    this.subscript === other.subscript &&
-                   this.color === other.color;
+                   this.color === other.color &&
+                   this.backgroundColor === other.backgroundColor;
         }
 
         clone() {
             return new FontProperties(this.size, this.family, this.weight, this.style,
                                        this.underline, this.strikethrough, this.superscript, this.subscript,
-                                       this.color);
+                                       this.color, this.backgroundColor);
         }
 
         toFontString() {
             return `${this.style} ${this.weight} ${this.size}px ${this.family}`;
+        }
+
+        // Serialize to a plain object (for JSON document export).
+        toObject() {
+            return {
+                size: this.size,
+                family: this.family,
+                weight: this.weight,
+                style: this.style,
+                underline: this.underline,
+                strikethrough: this.strikethrough,
+                superscript: this.superscript,
+                subscript: this.subscript,
+                color: this.color,
+                backgroundColor: this.backgroundColor
+            };
+        }
+
+        // Rebuild a FontProperties from a plain object produced by toObject().
+        // Missing fields fall back to constructor defaults so older documents
+        // (saved before a field existed) still load cleanly.
+        static fromObject(obj = {}) {
+            const d = new FontProperties();
+            return new FontProperties(
+                obj.size ?? d.size,
+                obj.family ?? d.family,
+                obj.weight ?? d.weight,
+                obj.style ?? d.style,
+                obj.underline ?? d.underline,
+                obj.strikethrough ?? d.strikethrough,
+                obj.superscript ?? d.superscript,
+                obj.subscript ?? d.subscript,
+                obj.color ?? d.color,
+                obj.backgroundColor ?? d.backgroundColor
+            );
         }
 
         // Toggle formatting
@@ -2689,12 +2727,22 @@
                 : fontProps.toFontString();
 
             this.ctx.font = fontString;
-            this.ctx.fillStyle = fontProps.color || '#000000';
-            this.ctx.fillText(textLink.text, posX, posY);
 
-            // Measure text for decoration lines
+            // Measure text once (used for the highlight box and decoration lines).
             const metrics = this.ctx.measureText(textLink.text);
             const textWidth = metrics.width;
+
+            // Draw highlight background behind the glyphs, spanning the line's
+            // ascent/descent so it reads like a marker stroke.
+            if (fontProps.backgroundColor) {
+                const ascent = textLink.getAscent() || fontSize * 0.8;
+                const descent = textLink.getDescent() || fontSize * 0.2;
+                this.ctx.fillStyle = fontProps.backgroundColor;
+                this.ctx.fillRect(posX, posY - ascent, textWidth, ascent + descent);
+            }
+
+            this.ctx.fillStyle = fontProps.color || '#000000';
+            this.ctx.fillText(textLink.text, posX, posY);
 
             // Draw underline
             if (fontProps.underline) {
@@ -2948,6 +2996,18 @@
             }
         }
 
+        // Set the highlight (background) color. Pass null to clear the highlight.
+        setHighlightColor(color) {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('backgroundColor', () => color);
+                this.render();
+            } else {
+                // Set for next typed text
+                this.chain.currentFontProperties.backgroundColor = color;
+            }
+        }
+
         // Text alignment methods
         getCurrentParagraphIndex() {
             const items = this.chain.getItems();
@@ -3087,6 +3147,78 @@
                     this.chain.printableKeyPressed(char);
                 }
             }
+            this.render();
+        }
+
+        // Serialize the full document (text, per-run formatting, and paragraph
+        // alignment) to a plain object suitable for JSON.stringify. Cursor and
+        // wrap (virtual newline) state are layout artifacts and are not included;
+        // they are recomputed on load.
+        toJSON() {
+            const items = this.chain.getItems();
+            const content = [];
+            for (let item of items) {
+                if (item instanceof TextLink) {
+                    content.push({
+                        type: 'text',
+                        text: item.text,
+                        font: item.intrinsic.fontProperties.toObject()
+                    });
+                } else if (item instanceof NewlineLink) {
+                    content.push({ type: 'newline' });
+                }
+            }
+
+            const alignments = {};
+            for (let [paragraphIndex, alignment] of this.paragraphAlignments) {
+                alignments[paragraphIndex] = alignment;
+            }
+
+            return {
+                version: 1,
+                content,
+                alignments
+            };
+        }
+
+        // Rebuild the document from an object produced by toJSON() (or its JSON
+        // string form). Replaces the current document contents and resets undo
+        // history so the loaded document is the new baseline.
+        fromJSON(data) {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (!data || !Array.isArray(data.content)) {
+                throw new Error('fromJSON: invalid document data');
+            }
+
+            // Rebuild the chain directly from the serialized runs, then place the
+            // cursor at the end of the document.
+            const items = [];
+            for (let entry of data.content) {
+                if (entry.type === 'text') {
+                    items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+                } else if (entry.type === 'newline') {
+                    items.push(new NewlineLink());
+                }
+            }
+            items.push(new CursorLink());
+            this.chain.items = items;
+
+            // Restore paragraph alignments (keys are stringified in JSON objects).
+            this.paragraphAlignments = new Map();
+            if (data.alignments) {
+                for (let key of Object.keys(data.alignments)) {
+                    this.paragraphAlignments.set(Number(key), data.alignments[key]);
+                }
+            }
+
+            // The loaded document becomes the new baseline.
+            this.history = [];
+            this.historyIndex = -1;
+
+            this.chain.clearSelection();
+            this.chain.recalc();
             this.render();
         }
 

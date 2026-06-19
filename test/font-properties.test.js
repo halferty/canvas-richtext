@@ -162,4 +162,48 @@ describe('FontProperties', () => {
             assert.strictEqual(font.toFontString(), 'italic normal 16px Arial');
         });
     });
+
+    describe('backgroundColor (highlight)', () => {
+        it('should default to null', () => {
+            const font = new FontProperties();
+            assert.strictEqual(font.backgroundColor, null);
+        });
+
+        it('should be included in clone', () => {
+            const font = new FontProperties();
+            font.backgroundColor = '#ffff00';
+            assert.strictEqual(font.clone().backgroundColor, '#ffff00');
+        });
+
+        it('should affect doPropertiesMatch', () => {
+            const a = new FontProperties();
+            const b = new FontProperties();
+            b.backgroundColor = '#ffff00';
+            assert.strictEqual(a.doPropertiesMatch(b), false);
+            a.backgroundColor = '#ffff00';
+            assert.strictEqual(a.doPropertiesMatch(b), true);
+        });
+    });
+
+    describe('toObject / fromObject', () => {
+        it('should round-trip all fields', () => {
+            const font = new FontProperties(22, 'Georgia', 'bold', 'italic', true, true, false, false, '#ff0000', '#00ff00');
+            const restored = FontProperties.fromObject(font.toObject());
+            assert.strictEqual(restored.doPropertiesMatch(font), true);
+        });
+
+        it('should fill missing fields with defaults', () => {
+            const restored = FontProperties.fromObject({ size: 30 });
+            assert.strictEqual(restored.size, 30);
+            assert.strictEqual(restored.family, 'Arial');
+            assert.strictEqual(restored.color, '#000000');
+            assert.strictEqual(restored.backgroundColor, null);
+        });
+
+        it('should produce a plain serializable object', () => {
+            const obj = new FontProperties().toObject();
+            assert.strictEqual(obj.constructor, Object);
+            assert.doesNotThrow(() => JSON.stringify(obj));
+        });
+    });
 });

@@ -219,6 +219,56 @@ describe('Text Formatting', () => {
         });
     });
 
+    describe('Highlight Color', () => {
+        it('should default to no highlight', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+
+            assert.strictEqual(editor.chain.currentFontProperties.backgroundColor, null);
+        });
+
+        it('should set highlight color on selected text', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('Hello World');
+
+            editor.selectAll();
+            editor.setHighlightColor('#ffff00');
+
+            const items = editor.chain.getItems();
+            const textItems = items.filter(item => item.text && item.text.trim().length > 0);
+            textItems.forEach(item => {
+                assert.strictEqual(item.intrinsic.fontProperties.backgroundColor, '#ffff00');
+            });
+        });
+
+        it('should set highlight for next typed text when no selection', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+
+            editor.setHighlightColor('#00ffff');
+
+            assert.strictEqual(editor.chain.currentFontProperties.backgroundColor, '#00ffff');
+        });
+
+        it('should clear highlight when set to null', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('Hello World');
+
+            editor.selectAll();
+            editor.setHighlightColor('#ffff00');
+            editor.selectAll();
+            editor.setHighlightColor(null);
+
+            const items = editor.chain.getItems();
+            const textItems = items.filter(item => item.text && item.text.trim().length > 0);
+            textItems.forEach(item => {
+                assert.strictEqual(item.intrinsic.fontProperties.backgroundColor, null);
+            });
+        });
+    });
+
     describe('Font Size Controls', () => {
         it('should increase font size by 2px', () => {
             const canvas = createCanvas(800, 600);

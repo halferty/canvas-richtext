@@ -1283,12 +1283,22 @@ export class CanvasEditor {
             : fontProps.toFontString();
 
         this.ctx.font = fontString;
-        this.ctx.fillStyle = fontProps.color || '#000000';
-        this.ctx.fillText(textLink.text, posX, posY);
 
-        // Measure text for decoration lines
+        // Measure text once (used for the highlight box and decoration lines).
         const metrics = this.ctx.measureText(textLink.text);
         const textWidth = metrics.width;
+
+        // Draw highlight background behind the glyphs, spanning the line's
+        // ascent/descent so it reads like a marker stroke.
+        if (fontProps.backgroundColor) {
+            const ascent = textLink.getAscent() || fontSize * 0.8;
+            const descent = textLink.getDescent() || fontSize * 0.2;
+            this.ctx.fillStyle = fontProps.backgroundColor;
+            this.ctx.fillRect(posX, posY - ascent, textWidth, ascent + descent);
+        }
+
+        this.ctx.fillStyle = fontProps.color || '#000000';
+        this.ctx.fillText(textLink.text, posX, posY);
 
         // Draw underline
         if (fontProps.underline) {
@@ -1542,6 +1552,18 @@ export class CanvasEditor {
         }
     }
 
+    // Set the highlight (background) color. Pass null to clear the highlight.
+    setHighlightColor(color) {
+        if (this.chain.hasSelection()) {
+            this.takeSnapshot();
+            this.applyFormattingToSelection('backgroundColor', () => color);
+            this.render();
+        } else {
+            // Set for next typed text
+            this.chain.currentFontProperties.backgroundColor = color;
+        }
+    }
+
     // Text alignment methods
     getCurrentParagraphIndex() {
         const items = this.chain.getItems();
@@ -1681,6 +1703,78 @@ export class CanvasEditor {
                 this.chain.printableKeyPressed(char);
             }
         }
+        this.render();
+    }
+
+    // Serialize the full document (text, per-run formatting, and paragraph
+    // alignment) to a plain object suitable for JSON.stringify. Cursor and
+    // wrap (virtual newline) state are layout artifacts and are not included;
+    // they are recomputed on load.
+    toJSON() {
+        const items = this.chain.getItems();
+        const content = [];
+        for (let item of items) {
+            if (item instanceof TextLink) {
+                content.push({
+                    type: 'text',
+                    text: item.text,
+                    font: item.intrinsic.fontProperties.toObject()
+                });
+            } else if (item instanceof NewlineLink) {
+                content.push({ type: 'newline' });
+            }
+        }
+
+        const alignments = {};
+        for (let [paragraphIndex, alignment] of this.paragraphAlignments) {
+            alignments[paragraphIndex] = alignment;
+        }
+
+        return {
+            version: 1,
+            content,
+            alignments
+        };
+    }
+
+    // Rebuild the document from an object produced by toJSON() (or its JSON
+    // string form). Replaces the current document contents and resets undo
+    // history so the loaded document is the new baseline.
+    fromJSON(data) {
+        if (typeof data === 'string') {
+            data = JSON.parse(data);
+        }
+        if (!data || !Array.isArray(data.content)) {
+            throw new Error('fromJSON: invalid document data');
+        }
+
+        // Rebuild the chain directly from the serialized runs, then place the
+        // cursor at the end of the document.
+        const items = [];
+        for (let entry of data.content) {
+            if (entry.type === 'text') {
+                items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+            } else if (entry.type === 'newline') {
+                items.push(new NewlineLink());
+            }
+        }
+        items.push(new CursorLink());
+        this.chain.items = items;
+
+        // Restore paragraph alignments (keys are stringified in JSON objects).
+        this.paragraphAlignments = new Map();
+        if (data.alignments) {
+            for (let key of Object.keys(data.alignments)) {
+                this.paragraphAlignments.set(Number(key), data.alignments[key]);
+            }
+        }
+
+        // The loaded document becomes the new baseline.
+        this.history = [];
+        this.historyIndex = -1;
+
+        this.chain.clearSelection();
+        this.chain.recalc();
         this.render();
     }
 
