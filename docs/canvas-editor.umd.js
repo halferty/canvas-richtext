@@ -2826,12 +2826,16 @@
             this.ctx.stroke();
         }
 
-        renderListMarkers() {
-            if (this.paragraphLists.size === 0) return;
+        // Compute where each list paragraph's marker should be drawn. Returned as
+        // { paragraph, marker, x, y } in paragraph order. Separated from drawing so
+        // marker placement can be tested without a real canvas.
+        getListMarkerPositions() {
+            const positions = [];
+            if (this.paragraphLists.size === 0) return positions;
             const items = this.chain.getItems();
 
-            // Total paragraph count (newlines + 1) so numbering can be computed
-            // for every paragraph, then look up each list paragraph's marker text.
+            // Total paragraph count (newlines + 1) so numbering can be computed for
+            // every paragraph, then look up each list paragraph's marker text.
             let totalParagraphs = 1;
             for (const item of items) {
                 if (item instanceof NewlineLink) totalParagraphs++;
@@ -2852,26 +2856,44 @@
                 }
             }
 
-            const gap = 8;
-            this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
-            this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
-
-            // Draw each list paragraph's marker once, aligned to the baseline of
-            // its first visual line (the first item in the paragraph carrying a Y).
-            const drawn = new Set();
+            // Baseline Y of each paragraph's first line. A newline's posY is the
+            // *next* line's baseline, so the newline ending paragraph k gives the
+            // first-line baseline of paragraph k+1 — which is the only reliable
+            // source for an empty paragraph (it has no text run of its own).
+            const baselineByPara = new Map();
             let paragraphIdx = 0;
             for (const item of items) {
-                if (!drawn.has(paragraphIdx) && markerText.has(paragraphIdx) &&
-                    !(item instanceof VirtualNewlineLink) &&
-                    item.computed && typeof item.computed.posY === 'number') {
-                    const marker = markerText.get(paragraphIdx);
-                    const width = this.ctx.measureText(marker).width;
-                    this.ctx.fillText(marker, this.LIST_INDENT - gap - width, item.computed.posY);
-                    drawn.add(paragraphIdx);
-                }
                 if (item instanceof NewlineLink) {
+                    if (item.computed && typeof item.computed.posY === 'number') {
+                        baselineByPara.set(paragraphIdx + 1, item.computed.posY);
+                    }
                     paragraphIdx++;
+                } else if (item instanceof TextLink || item instanceof CursorLink) {
+                    if (!baselineByPara.has(paragraphIdx) &&
+                        item.computed && typeof item.computed.posY === 'number') {
+                        baselineByPara.set(paragraphIdx, item.computed.posY);
+                    }
                 }
+            }
+
+            const gap = 8;
+            this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+            for (const [p, marker] of markerText) {
+                const y = baselineByPara.get(p);
+                if (typeof y !== 'number') continue;
+                const width = this.ctx.measureText(marker).width;
+                positions.push({ paragraph: p, marker, x: this.LIST_INDENT - gap - width, y });
+            }
+            return positions;
+        }
+
+        renderListMarkers() {
+            const positions = this.getListMarkerPositions();
+            if (positions.length === 0) return;
+            this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+            this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
+            for (const pos of positions) {
+                this.ctx.fillText(pos.marker, pos.x, pos.y);
             }
         }
 
