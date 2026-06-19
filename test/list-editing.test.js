@@ -140,4 +140,49 @@ describe('List editing', () => {
             assert.strictEqual(hitPos(editor, tl.computed.posX + 0.5, tl.computed.posY), 0);
         });
     });
+
+    describe('Enter at the start of a list item', () => {
+        it('should insert an empty item above and move the item down', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('First\nSecond');
+            editor.chain.selectionStart = 0;
+            editor.chain.selectionEnd = editor.getText().length;
+            editor.toggleBulletList();
+            editor.chain.clearSelection();
+
+            // Cursor at the very start of "Second".
+            editor.chain.moveCursorToCharPosition(6);
+            press(editor, 'Enter');
+
+            // A blank line is inserted; the cursor stays with "Second".
+            assert.strictEqual(editor.getText(), 'First\n\nSecond');
+            assert.strictEqual(editor.chain.getCursorCharPosition(), 7);
+            // All three paragraphs are bullets, including the new empty one.
+            assert.strictEqual(editor.paragraphLists.get(0), 'bullet');
+            assert.strictEqual(editor.paragraphLists.get(1), 'bullet');
+            assert.strictEqual(editor.paragraphLists.get(2), 'bullet');
+        });
+
+        it('should draw each list marker on its own line (incl. the empty one)', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('First\nSecond');
+            editor.chain.selectionStart = 0;
+            editor.chain.selectionEnd = editor.getText().length;
+            editor.toggleBulletList();
+            editor.chain.clearSelection();
+            editor.chain.moveCursorToCharPosition(6);
+            press(editor, 'Enter');
+            editor.render();
+
+            const positions = editor.getListMarkerPositions();
+            assert.strictEqual(positions.length, 3);
+            const ys = positions.map(p => p.y);
+            // Distinct, strictly increasing baselines — no collision on the
+            // empty middle line.
+            assert.ok(ys[0] < ys[1] && ys[1] < ys[2], `expected increasing Ys, got ${ys}`);
+            assert.strictEqual(new Set(ys).size, 3);
+        });
+    });
 });

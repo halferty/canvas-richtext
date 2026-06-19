@@ -1,6 +1,6 @@
 import { Chain } from './Chain.js';
 import { FontProperties } from './FontProperties.js';
-import { TextLink, CursorLink, NewlineLink, VirtualNewlineLink, HorizontalRuleLink } from './ChainLink.js';
+import { TextLink, CursorLink, NewlineLink, VirtualNewlineLink, HorizontalRuleLink, ImageLink } from './ChainLink.js';
 
 /**
  * CanvasEditor - Main editor class that manages the canvas, rendering, and user interactions
@@ -93,6 +93,11 @@ export class CanvasEditor {
         this.LIST_INDENT = 32;
         // Counter for stable paragraph-boundary ids (see boundaryKey).
         this._pidCounter = 0;
+
+        // Currently selected block image (for resize/move/justify), or null.
+        this.selectedImage = null;
+        // Side length of an image's square resize handles, in pixels.
+        this.imageHandleSize = 10;
 
         // Find/Replace state
         this.findMatches = [];
@@ -238,6 +243,24 @@ export class CanvasEditor {
             this.toggleUnderline();
             this.resetCursorBlink();
             return;
+        }
+
+        // A selected image consumes Delete/Backspace (remove) and Escape
+        // (deselect); any other key drops the image selection and falls through
+        // to normal editing.
+        if (this.selectedImage) {
+            if (key === 'Backspace' || key === 'Delete') {
+                e.preventDefault();
+                this.deleteSelectedImage();
+                this.resetCursorBlink();
+                return;
+            }
+            if (key === 'Escape') {
+                e.preventDefault();
+                this.clearImageSelection();
+                return;
+            }
+            this.clearImageSelection();
         }
 
         // Handle editor keys
@@ -566,6 +589,31 @@ export class CanvasEditor {
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
+        // Image interactions take precedence over text positioning.
+        // 1) Grabbing a resize handle of the already-selected image.
+        const handle = this.imageHandleAt(x, y);
+        if (handle) {
+            this.takeSnapshot();
+            this._imageResizeHandle = handle;
+            this.isMouseDown = true;
+            this.canvas.focus();
+            return;
+        }
+        // 2) Clicking an image selects it; a subsequent drag moves it.
+        const clickedImage = this.imageAt(x, y);
+        if (clickedImage) {
+            this.selectImage(clickedImage);
+            this._imageMoveCandidate = clickedImage;
+            this._imageMoving = false;
+            this.mouseDownX = x;
+            this.mouseDownY = y;
+            this.isMouseDown = true;
+            this.canvas.focus();
+            return;
+        }
+        // 3) Clicking elsewhere clears any image selection.
+        this.clearImageSelection();
+
         // Track click count for double/triple click
         const now = Date.now();
         if (now - this.lastClickTime < 500) {
@@ -660,8 +708,26 @@ export class CanvasEditor {
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
+        // Resizing the selected image by dragging a handle. The top/bottom edge
+        // handles drive height; all others drive width.
+        if (this._imageResizeHandle) {
+            if (this._imageResizeHandle === 'n' || this._imageResizeHandle === 's') {
+                this.resizeSelectedImageToHeight(this.imageResizeHeightFromPointer(y));
+            } else {
+                this.resizeSelectedImageToWidth(this.imageResizeWidthFromPointer(x));
+            }
+            return;
+        }
+
         // Calculate drag distance
         const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
+
+        // Dragging the selected image to a new position.
+        if (this._imageMoveCandidate && dragDistance >= 5) {
+            this._imageMoving = true;
+            if (this.canvas.style) this.canvas.style.cursor = 'grabbing';
+            return;
+        }
 
         // Check if we should start dragging selected text
         if (this.draggedText && !this.isDragging && dragDistance >= 5) {
@@ -707,6 +773,27 @@ export class CanvasEditor {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left - this.options.padding;
         const y = e.clientY - rect.top - this.options.padding + this.scrollY;
+
+        // Finish an image resize.
+        if (this._imageResizeHandle) {
+            this._imageResizeHandle = null;
+            this.isMouseDown = false;
+            return;
+        }
+
+        // Finish an image move (drop it at the nearest position), or just
+        // register the selecting click.
+        if (this._imageMoveCandidate) {
+            if (this._imageMoving) {
+                const pos = this.chain.charPositionAtXY(x, y);
+                this.moveSelectedImageToCharPos(pos);
+                if (this.canvas.style) this.canvas.style.cursor = 'text';
+            }
+            this._imageMoveCandidate = null;
+            this._imageMoving = false;
+            this.isMouseDown = false;
+            return;
+        }
 
         // Handle drag and drop completion
         if (this.isDragging && this.draggedText) {
@@ -1215,6 +1302,8 @@ export class CanvasEditor {
             
             if (item instanceof TextLink) {
                 this.renderTextLink(item);
+            } else if (item instanceof ImageLink) {
+                this.renderImage(item);
             } else if (item instanceof HorizontalRuleLink) {
                 this.renderHorizontalRule(item);
             } else if (item instanceof CursorLink) {
@@ -1225,10 +1314,63 @@ export class CanvasEditor {
         // Draw bullet/number markers in the left gutter of list paragraphs.
         this.renderListMarkers();
 
+        // Draw the selection outline + resize handles for a selected image.
+        this.renderImageSelection();
+
         this.ctx.restore();
 
         // Scrollbar is drawn in screen space, on top of the content.
         this.renderScrollbar();
+    }
+
+    renderImage(image) {
+        const box = image.computed && image.computed.box;
+        if (!box) return;
+
+        const entry = this.getImageEntry(image.intrinsic.src);
+        if (entry.loaded && entry.img) {
+            this.ctx.drawImage(entry.img, box.x, box.y, box.w, box.h);
+            return;
+        }
+
+        // Placeholder while loading (or when decoding isn't available).
+        this.ctx.fillStyle = entry.error ? '#fde8e8' : '#f0f0f0';
+        this.ctx.fillRect(box.x, box.y, box.w, box.h);
+        this.ctx.strokeStyle = '#cccccc';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+
+        this.ctx.fillStyle = '#888888';
+        this.ctx.font = '12px sans-serif';
+        this.ctx.textBaseline = 'top';
+        const label = entry.error
+            ? (image.intrinsic.alt || 'Image failed to load')
+            : (image.intrinsic.alt || 'Loading image…');
+        this.ctx.fillText(label, box.x + 8, box.y + 8);
+        this.ctx.textBaseline = 'alphabetic';
+    }
+
+    renderImageSelection() {
+        const image = this.selectedImage;
+        if (!(image instanceof ImageLink)) return;
+        const b = image.computed && image.computed.box;
+        if (!b) return;
+
+        // Selection outline.
+        this.ctx.strokeStyle = '#0078d7';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+        // Corner resize handles.
+        const handles = this.getImageHandles(image);
+        this.ctx.lineWidth = 1;
+        for (const name of Object.keys(handles)) {
+            const r = handles[name];
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(r.x, r.y, r.w, r.h);
+            this.ctx.strokeStyle = '#0078d7';
+            this.ctx.strokeRect(r.x, r.y, r.w, r.h);
+        }
     }
 
     renderHorizontalRule(rule) {
@@ -1246,12 +1388,16 @@ export class CanvasEditor {
         this.ctx.stroke();
     }
 
-    renderListMarkers() {
-        if (this.paragraphLists.size === 0) return;
+    // Compute where each list paragraph's marker should be drawn. Returned as
+    // { paragraph, marker, x, y } in paragraph order. Separated from drawing so
+    // marker placement can be tested without a real canvas.
+    getListMarkerPositions() {
+        const positions = [];
+        if (this.paragraphLists.size === 0) return positions;
         const items = this.chain.getItems();
 
-        // Total paragraph count (newlines + 1) so numbering can be computed
-        // for every paragraph, then look up each list paragraph's marker text.
+        // Total paragraph count (newlines + 1) so numbering can be computed for
+        // every paragraph, then look up each list paragraph's marker text.
         let totalParagraphs = 1;
         for (const item of items) {
             if (item instanceof NewlineLink) totalParagraphs++;
@@ -1272,26 +1418,44 @@ export class CanvasEditor {
             }
         }
 
-        const gap = 8;
-        this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
-        this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
-
-        // Draw each list paragraph's marker once, aligned to the baseline of
-        // its first visual line (the first item in the paragraph carrying a Y).
-        const drawn = new Set();
+        // Baseline Y of each paragraph's first line. A newline's posY is the
+        // *next* line's baseline, so the newline ending paragraph k gives the
+        // first-line baseline of paragraph k+1 — which is the only reliable
+        // source for an empty paragraph (it has no text run of its own).
+        const baselineByPara = new Map();
         let paragraphIdx = 0;
         for (const item of items) {
-            if (!drawn.has(paragraphIdx) && markerText.has(paragraphIdx) &&
-                !(item instanceof VirtualNewlineLink) &&
-                item.computed && typeof item.computed.posY === 'number') {
-                const marker = markerText.get(paragraphIdx);
-                const width = this.ctx.measureText(marker).width;
-                this.ctx.fillText(marker, this.LIST_INDENT - gap - width, item.computed.posY);
-                drawn.add(paragraphIdx);
-            }
             if (item instanceof NewlineLink) {
+                if (item.computed && typeof item.computed.posY === 'number') {
+                    baselineByPara.set(paragraphIdx + 1, item.computed.posY);
+                }
                 paragraphIdx++;
+            } else if (item instanceof TextLink || item instanceof CursorLink) {
+                if (!baselineByPara.has(paragraphIdx) &&
+                    item.computed && typeof item.computed.posY === 'number') {
+                    baselineByPara.set(paragraphIdx, item.computed.posY);
+                }
             }
+        }
+
+        const gap = 8;
+        this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+        for (const [p, marker] of markerText) {
+            const y = baselineByPara.get(p);
+            if (typeof y !== 'number') continue;
+            const width = this.ctx.measureText(marker).width;
+            positions.push({ paragraph: p, marker, x: this.LIST_INDENT - gap - width, y });
+        }
+        return positions;
+    }
+
+    renderListMarkers() {
+        const positions = this.getListMarkerPositions();
+        if (positions.length === 0) return;
+        this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+        this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
+        for (const pos of positions) {
+            this.ctx.fillText(pos.marker, pos.x, pos.y);
         }
     }
 
@@ -1887,6 +2051,208 @@ export class CanvasEditor {
         this.render();
     }
 
+    // --- Images -----------------------------------------------------------
+
+    // Insert a block image on its own line. The caller (its uploader/resizer)
+    // supplies the thumbnail `src`, an optional full-size `full` URL (captured
+    // in the document/JSON but not opened by the editor — display is a
+    // presentation concern), the display `width`/`height`, `alt`, and `align`.
+    insertImage({ src, full = null, width = 0, height = 0, alt = '', align = 'center' }) {
+        this.takeSnapshot();
+        const link = new ImageLink({ src, full, width, height, alt, align });
+        this.remapAroundEdit(() => this.chain.insertBlock(link));
+        this.selectedImage = link;
+        this.scrollToCursorOnNextRender = true;
+        this.render();
+    }
+
+    // Per-source image cache. Decoding is browser-only; in non-DOM
+    // environments the entry stays unloaded and a placeholder is drawn, so
+    // layout (which uses the model's stored dimensions) stays deterministic.
+    getImageEntry(src) {
+        if (!this._imageCache) this._imageCache = new Map();
+        let entry = this._imageCache.get(src);
+        if (entry) return entry;
+
+        entry = { loaded: false, error: false, img: null };
+        this._imageCache.set(src, entry);
+
+        if (typeof Image !== 'undefined' && src) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                entry.loaded = true;
+                entry.img = img;
+                this.render();
+            };
+            img.onerror = () => {
+                entry.error = true;
+                this.render();
+            };
+            img.src = src;
+        }
+        return entry;
+    }
+
+    // The block image whose drawn box contains the given content-space point.
+    imageAt(x, y) {
+        for (const item of this.chain.getItems()) {
+            if (item instanceof ImageLink && item.computed && item.computed.box) {
+                const b = item.computed.box;
+                if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                    return item;
+                }
+            }
+        }
+        return null;
+    }
+
+    // --- Image selection / resize / move / justify ------------------------
+
+    selectImage(image) {
+        this.selectedImage = (image instanceof ImageLink) ? image : null;
+        // Selecting an image collapses any text selection.
+        this.chain.clearSelection();
+        this.render();
+    }
+
+    clearImageSelection() {
+        if (this.selectedImage) {
+            this.selectedImage = null;
+            this.render();
+        }
+    }
+
+    // Square resize handles at the four corners and four edge midpoints of an
+    // image's box, in content space. Returns null when it has no laid-out box.
+    getImageHandles(image) {
+        const b = image && image.computed && image.computed.box;
+        if (!b) return null;
+        const s = this.imageHandleSize;
+        const half = s / 2;
+        const left = b.x - half;
+        const right = b.x + b.w - half;
+        const midX = b.x + b.w / 2 - half;
+        const top = b.y - half;
+        const bottom = b.y + b.h - half;
+        const midY = b.y + b.h / 2 - half;
+        return {
+            nw: { x: left, y: top, w: s, h: s },
+            n: { x: midX, y: top, w: s, h: s },
+            ne: { x: right, y: top, w: s, h: s },
+            e: { x: right, y: midY, w: s, h: s },
+            se: { x: right, y: bottom, w: s, h: s },
+            s: { x: midX, y: bottom, w: s, h: s },
+            sw: { x: left, y: bottom, w: s, h: s },
+            w: { x: left, y: midY, w: s, h: s }
+        };
+    }
+
+    // Name of the selected image's handle at a point, or null.
+    imageHandleAt(x, y) {
+        if (!this.selectedImage) return null;
+        const handles = this.getImageHandles(this.selectedImage);
+        if (!handles) return null;
+        for (const name of Object.keys(handles)) {
+            const r = handles[name];
+            if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+                return name;
+            }
+        }
+        return null;
+    }
+
+    // Resize the selected image to a target display width, preserving aspect
+    // ratio and clamping to a sensible range. Does not snapshot (the caller
+    // snapshots once at the start of a drag).
+    resizeSelectedImageToWidth(targetWidth) {
+        const image = this.selectedImage;
+        if (!image) return;
+        const iw = image.intrinsic.width || 1;
+        const ih = image.intrinsic.height || 1;
+        const aspect = iw / ih;
+        const minW = 24;
+        const maxW = this.editorWidth;
+        const w = Math.max(minW, Math.min(maxW, targetWidth));
+        image.intrinsic.width = Math.round(w);
+        image.intrinsic.height = Math.round(w / aspect);
+        this.chain.recalc();
+        this.render();
+    }
+
+    // Target width implied by a pointer X for the selected image, given its
+    // justification (the anchored edge stays put as it resizes).
+    imageResizeWidthFromPointer(x) {
+        const align = this.selectedImage
+            ? (this.selectedImage.intrinsic.align || 'center')
+            : 'center';
+        if (align === 'left') return x;
+        if (align === 'right') return this.editorWidth - x;
+        return Math.abs(x - this.editorWidth / 2) * 2;
+    }
+
+    // Resize by height (top edge anchored), preserving aspect ratio. Used by
+    // the top/bottom edge handles; reuses the width clamp via the aspect ratio.
+    resizeSelectedImageToHeight(targetHeight) {
+        const image = this.selectedImage;
+        if (!image) return;
+        const aspect = (image.intrinsic.width || 1) / (image.intrinsic.height || 1);
+        this.resizeSelectedImageToWidth(targetHeight * aspect);
+    }
+
+    // Target height implied by a pointer Y for the selected image. The image's
+    // top is the layout anchor, so the height tracks the pointer below it.
+    imageResizeHeightFromPointer(y) {
+        const b = this.selectedImage && this.selectedImage.computed && this.selectedImage.computed.box;
+        if (!b) return 0;
+        return y - b.y;
+    }
+
+    // Set the selected image's justification: 'left' | 'center' | 'right'.
+    setImageAlignment(align) {
+        if (!this.selectedImage) return;
+        this.takeSnapshot();
+        this.selectedImage.intrinsic.align = align;
+        this.chain.recalc();
+        this.render();
+    }
+
+    deleteSelectedImage() {
+        const image = this.selectedImage;
+        if (!image) return;
+        this.takeSnapshot();
+        this.remapAroundEdit(() => {
+            const idx = this.chain.items.indexOf(image);
+            if (idx !== -1) this.chain.items.splice(idx, 1);
+        });
+        this.selectedImage = null;
+        this.render();
+    }
+
+    // Relocate the selected image so it sits at the given flattened character
+    // position (its own block line). Used by drag-to-move.
+    moveSelectedImageToCharPos(pos) {
+        const image = this.selectedImage;
+        if (!image) return;
+        this.takeSnapshot();
+        this.remapAroundEdit(() => {
+            const items = this.chain.items;
+            const from = items.indexOf(image);
+            if (from === -1) return;
+
+            // The image occupies one character; removing it shifts positions
+            // after it down by one.
+            const imageStart = this.chain.getCharPosition(from, 0);
+            items.splice(from, 1);
+            let target = pos > imageStart ? pos - 1 : pos;
+
+            this.chain.moveCursorToCharPosition(target);
+            this.chain.insertBlock(image);
+        });
+        this.chain.recalc();
+        this.render();
+    }
+
     // --- Hyperlinks -------------------------------------------------------
 
     // The actual FontProperties active at the cursor (cloneable), as opposed
@@ -2300,6 +2666,7 @@ export class CanvasEditor {
     setText(text) {
         // Clear the chain and insert text
         this.chain.items = [new CursorLink()];
+        this.selectedImage = null;
         // A fresh plain-text document has no paragraph-level attributes.
         this.paragraphAlignments = new Map();
         this.paragraphLists = new Map();
@@ -2327,6 +2694,17 @@ export class CanvasEditor {
                     type: 'text',
                     text: item.text,
                     font: item.intrinsic.fontProperties.toObject()
+                });
+            } else if (item instanceof ImageLink) {
+                // Must precede NewlineLink: ImageLink extends it.
+                content.push({
+                    type: 'image',
+                    src: item.intrinsic.src,
+                    full: item.intrinsic.full,
+                    width: item.intrinsic.width,
+                    height: item.intrinsic.height,
+                    alt: item.intrinsic.alt,
+                    align: item.intrinsic.align
                 });
             } else if (item instanceof HorizontalRuleLink) {
                 // Must precede NewlineLink: HorizontalRuleLink extends it.
@@ -2363,6 +2741,15 @@ export class CanvasEditor {
         for (let entry of data.content) {
             if (entry.type === 'text') {
                 items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+            } else if (entry.type === 'image') {
+                items.push(new ImageLink({
+                    src: entry.src,
+                    full: entry.full,
+                    width: entry.width,
+                    height: entry.height,
+                    alt: entry.alt,
+                    align: entry.align
+                }));
             } else if (entry.type === 'hr') {
                 items.push(new HorizontalRuleLink());
             } else if (entry.type === 'newline') {
@@ -2371,6 +2758,8 @@ export class CanvasEditor {
         }
         items.push(new CursorLink());
         this.chain.items = items;
+        // The previously selected image object is no longer in the chain.
+        this.selectedImage = null;
 
         // Restore paragraph alignments (keys are stringified in JSON objects).
         this.paragraphAlignments = new Map();

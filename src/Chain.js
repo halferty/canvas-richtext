@@ -1,4 +1,4 @@
-import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink, HorizontalRuleLink } from './ChainLink.js';
+import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink, HorizontalRuleLink, ImageLink } from './ChainLink.js';
 
 /**
  * Chain - Manages the linked list of text, cursor, and newline elements
@@ -22,6 +22,20 @@ export class Chain {
         // Populated by the editor for list paragraphs so wrapping and the
         // hanging indent are computed against the reduced content width.
         this.paragraphIndents = new Map();
+        // Vertical margin above/below a block image, in pixels.
+        this.IMAGE_VMARGIN = 8;
+    }
+
+    // Display size of a block image, scaled down to fit the content width
+    // while preserving aspect ratio.
+    imageDrawSize(image) {
+        const iw = image.intrinsic.width || 1;
+        const ih = image.intrinsic.height || 1;
+        if (iw <= this.widthPixels) {
+            return { drawWidth: iw, drawHeight: ih };
+        }
+        const scale = this.widthPixels / iw;
+        return { drawWidth: this.widthPixels, drawHeight: ih * scale };
     }
 
     // Left indent (px) for a given paragraph index; 0 when not indented.
@@ -295,11 +309,18 @@ export class Chain {
             
             // Apply consistent line spacing to all lines
             let lineHeight = baseHeight * this.LINE_SPACING_MULT;
-            
+
+            // A block image owns its line; size that line to the image.
+            const isImageLine = i < this.items.length && this.items[i] instanceof ImageLink;
+            if (isImageLine) {
+                const { drawHeight } = this.imageDrawSize(this.items[i]);
+                lineHeight = drawHeight + this.IMAGE_VMARGIN * 2;
+            }
+
             for (let j = currentLineStartIdx; j < i; j++) {
                 this.items[j].computed.lineHeight = lineHeight;
             }
-            
+
             if ((this.items[i] instanceof VirtualNewlineLink) || (this.items[i] instanceof NewlineLink) || (i === this.items.length)) {
                 posY += lineHeight;
                 currentLineStartIdx = i + 1;
@@ -312,6 +333,26 @@ export class Chain {
                         ...this.items[i].computed,
                         posY
                     };
+                    if (isImageLine) {
+                        // posY is the bottom of the line; x follows the image's
+                        // justification within the content width.
+                        const { drawWidth, drawHeight } = this.imageDrawSize(this.items[i]);
+                        const align = this.items[i].intrinsic.align || 'center';
+                        let x;
+                        if (align === 'left') {
+                            x = 0;
+                        } else if (align === 'right') {
+                            x = Math.max(0, this.widthPixels - drawWidth);
+                        } else {
+                            x = Math.max(0, (this.widthPixels - drawWidth) / 2);
+                        }
+                        this.items[i].computed.box = {
+                            x,
+                            y: posY - drawHeight - this.IMAGE_VMARGIN,
+                            w: drawWidth,
+                            h: drawHeight
+                        };
+                    }
                 }
             } else if (this.items[i] instanceof TextLink) {
                 const measured = this.items[i].measureText(this.ctx);
@@ -916,25 +957,29 @@ export class Chain {
         this.recalc();
     }
 
-    // Insert a horizontal rule on its own line, with the cursor left below it.
-    insertHorizontalRule() {
+    // Insert a block-level link (rule, image, …) on its own line, leaving the
+    // cursor just below it. Breaks the current line first when the cursor is
+    // mid-line so the block gets its own row.
+    insertBlock(link) {
         const idx = this.cursorIdx();
 
-        // Determine whether the cursor already sits at the start of a line.
-        // If not, break the current line first so the rule gets its own row.
         let atLineStart = true;
         for (let j = idx - 1; j >= 0; j--) {
             if (this.items[j] instanceof CursorLink) continue;
-            // HorizontalRuleLink/NewlineLink both count as a preceding break.
+            // Any NewlineLink subclass (rule/image included) counts as a break.
             atLineStart = this.items[j] instanceof NewlineLink;
             break;
         }
 
         const toInsert = [];
         if (!atLineStart) toInsert.push(new NewlineLink());
-        toInsert.push(new HorizontalRuleLink());
+        toInsert.push(link);
         this.items.splice(idx, 0, ...toInsert);
         this.recalc();
+    }
+
+    insertHorizontalRule() {
+        this.insertBlock(new HorizontalRuleLink());
     }
 
     clicked(x, y) {
