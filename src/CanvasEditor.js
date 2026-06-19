@@ -2338,19 +2338,11 @@ export class CanvasEditor {
         };
     }
 
-    // Rebuild the document from an object produced by toJSON() (or its JSON
-    // string form). Replaces the current document contents and resets undo
-    // history so the loaded document is the new baseline.
-    fromJSON(data) {
-        if (typeof data === 'string') {
-            data = JSON.parse(data);
-        }
-        if (!data || !Array.isArray(data.content)) {
-            throw new Error('fromJSON: invalid document data');
-        }
-
-        // Rebuild the chain directly from the serialized runs, then place the
-        // cursor at the end of the document.
+    // Rebuild the chain and paragraph attributes from a parsed document object,
+    // placing the cursor at the end. Does not touch undo history, selection, or
+    // trigger a render; callers handle those. Shared by fromJSON() and undo
+    // snapshot restore.
+    loadDocumentData(data) {
         const items = [];
         for (let entry of data.content) {
             if (entry.type === 'text') {
@@ -2380,6 +2372,20 @@ export class CanvasEditor {
             }
         }
         this.syncParagraphIndents();
+    }
+
+    // Rebuild the document from an object produced by toJSON() (or its JSON
+    // string form). Replaces the current document contents and resets undo
+    // history so the loaded document is the new baseline.
+    fromJSON(data) {
+        if (typeof data === 'string') {
+            data = JSON.parse(data);
+        }
+        if (!data || !Array.isArray(data.content)) {
+            throw new Error('fromJSON: invalid document data');
+        }
+
+        this.loadDocumentData(data);
 
         // The loaded document becomes the new baseline.
         this.history = [];
@@ -2574,27 +2580,11 @@ export class CanvasEditor {
             this.history = this.history.slice(0, this.historyIndex + 1);
         }
 
-        // Create a deep copy of the chain state
+        // Capture the full document (rich runs, paragraph attributes, rules,
+        // links) plus cursor and selection so undo/redo are lossless.
         const snapshot = {
-            items: this.chain.items.map(item => {
-                if (item instanceof TextLink) {
-                    return {
-                        type: 'TextLink',
-                        text: item.text,
-                        fontProperties: {
-                            size: item.intrinsic.fontProperties.size,
-                            family: item.intrinsic.fontProperties.family,
-                            weight: item.intrinsic.fontProperties.weight,
-                            style: item.intrinsic.fontProperties.style
-                        }
-                    };
-                } else if (item instanceof CursorLink) {
-                    return { type: 'CursorLink' };
-                } else if (item instanceof NewlineLink) {
-                    return { type: 'NewlineLink' };
-                }
-                return null;
-            }).filter(item => item !== null),
+            doc: this.toJSON(),
+            cursorPos: this.chain.getCursorCharPosition(),
             selectionStart: this.chain.selectionStart,
             selectionEnd: this.chain.selectionEnd
         };
@@ -2612,25 +2602,10 @@ export class CanvasEditor {
     restoreSnapshot(snapshot) {
         if (!snapshot) return;
 
-        // Restore chain items
-        this.chain.items = snapshot.items.map(item => {
-            if (item.type === 'TextLink') {
-                const fontProps = new FontProperties(
-                    item.fontProperties.size,
-                    item.fontProperties.family,
-                    item.fontProperties.weight,
-                    item.fontProperties.style
-                );
-                return new TextLink(item.text, fontProps);
-            } else if (item.type === 'CursorLink') {
-                return new CursorLink();
-            } else if (item.type === 'NewlineLink') {
-                return new NewlineLink();
-            }
-            return null;
-        }).filter(item => item !== null);
-
-        // Restore selection
+        // Rebuild the document, then restore cursor and selection. Does not
+        // touch the history stack (unlike fromJSON).
+        this.loadDocumentData(snapshot.doc);
+        this.chain.moveCursorToCharPosition(snapshot.cursorPos);
         this.chain.selectionStart = snapshot.selectionStart;
         this.chain.selectionEnd = snapshot.selectionEnd;
 
