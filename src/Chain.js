@@ -1,4 +1,4 @@
-import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink } from './ChainLink.js';
+import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink, HorizontalRuleLink } from './ChainLink.js';
 
 /**
  * Chain - Manages the linked list of text, cursor, and newline elements
@@ -913,6 +913,27 @@ export class Chain {
 
     enterPressed() {
         this.items.splice(this.cursorIdx(), 0, new NewlineLink());
+        this.recalc();
+    }
+
+    // Insert a horizontal rule on its own line, with the cursor left below it.
+    insertHorizontalRule() {
+        const idx = this.cursorIdx();
+
+        // Determine whether the cursor already sits at the start of a line.
+        // If not, break the current line first so the rule gets its own row.
+        let atLineStart = true;
+        for (let j = idx - 1; j >= 0; j--) {
+            if (this.items[j] instanceof CursorLink) continue;
+            // HorizontalRuleLink/NewlineLink both count as a preceding break.
+            atLineStart = this.items[j] instanceof NewlineLink;
+            break;
+        }
+
+        const toInsert = [];
+        if (!atLineStart) toInsert.push(new NewlineLink());
+        toInsert.push(new HorizontalRuleLink());
+        this.items.splice(idx, 0, ...toInsert);
         this.recalc();
     }
 

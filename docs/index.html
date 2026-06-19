@@ -542,6 +542,7 @@
                 <div class="toolbar-group">
                     <button id="bullet-list-btn" class="format-btn" title="Bulleted list">• List</button>
                     <button id="numbered-list-btn" class="format-btn" title="Numbered list">1. List</button>
+                    <button id="horizontal-rule-btn" class="format-btn" title="Insert horizontal rule">― Rule</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -1052,6 +1053,12 @@ Type away and explore the features...`;
 
         document.getElementById('numbered-list-btn').addEventListener('click', () => {
             editor.toggleNumberedList();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        document.getElementById('horizontal-rule-btn').addEventListener('click', () => {
+            editor.insertHorizontalRule();
             canvas.focus({ preventScroll: true });
             updateToolbar();
         });

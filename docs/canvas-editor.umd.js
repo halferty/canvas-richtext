@@ -113,6 +113,14 @@
     class NewlineLink extends ChainLink {}
 
     /**
+     * HorizontalRuleLink - A divider rendered as a horizontal line on its own row.
+     * It extends NewlineLink so that all line-breaking, character-counting,
+     * navigation, and selection logic treats it like a line break; only its
+     * rendering and serialization differ.
+     */
+    class HorizontalRuleLink extends NewlineLink {}
+
+    /**
      * Chain - Manages the linked list of text, cursor, and newline elements
      */
     class Chain {
@@ -1016,6 +1024,27 @@
 
         enterPressed() {
             this.items.splice(this.cursorIdx(), 0, new NewlineLink());
+            this.recalc();
+        }
+
+        // Insert a horizontal rule on its own line, with the cursor left below it.
+        insertHorizontalRule() {
+            const idx = this.cursorIdx();
+
+            // Determine whether the cursor already sits at the start of a line.
+            // If not, break the current line first so the rule gets its own row.
+            let atLineStart = true;
+            for (let j = idx - 1; j >= 0; j--) {
+                if (this.items[j] instanceof CursorLink) continue;
+                // HorizontalRuleLink/NewlineLink both count as a preceding break.
+                atLineStart = this.items[j] instanceof NewlineLink;
+                break;
+            }
+
+            const toInsert = [];
+            if (!atLineStart) toInsert.push(new NewlineLink());
+            toInsert.push(new HorizontalRuleLink());
+            this.items.splice(idx, 0, ...toInsert);
             this.recalc();
         }
 
@@ -2640,6 +2669,8 @@
                 
                 if (item instanceof TextLink) {
                     this.renderTextLink(item);
+                } else if (item instanceof HorizontalRuleLink) {
+                    this.renderHorizontalRule(item);
                 } else if (item instanceof CursorLink) {
                     this.renderCursor(item);
                 }
@@ -2652,6 +2683,21 @@
 
             // Scrollbar is drawn in screen space, on top of the content.
             this.renderScrollbar();
+        }
+
+        renderHorizontalRule(rule) {
+            // rule.computed.posY is the bottom of the (empty) line the rule owns;
+            // draw the line through the vertical middle of that line's text slot.
+            const posY = (rule.computed && rule.computed.posY) || 0;
+            const midOffset = this.defaultFontProperties.size * 0.75;
+            const y = posY - midOffset;
+
+            this.ctx.strokeStyle = this.options.horizontalRuleColor || 'rgba(0, 0, 0, 0.35)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.editorWidth, y);
+            this.ctx.stroke();
         }
 
         renderListMarkers() {
@@ -3191,6 +3237,14 @@
             this.setList('number');
         }
 
+        // Insert a horizontal rule (divider) on its own line at the cursor.
+        insertHorizontalRule() {
+            this.takeSnapshot();
+            this.chain.insertHorizontalRule();
+            this.scrollToCursorOnNextRender = true;
+            this.render();
+        }
+
         toggleCenterAlign() {
             const paragraphIndex = this.getCurrentParagraphIndex();
             const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
@@ -3345,6 +3399,9 @@
                         text: item.text,
                         font: item.intrinsic.fontProperties.toObject()
                     });
+                } else if (item instanceof HorizontalRuleLink) {
+                    // Must precede NewlineLink: HorizontalRuleLink extends it.
+                    content.push({ type: 'hr' });
                 } else if (item instanceof NewlineLink) {
                     content.push({ type: 'newline' });
                 }
@@ -3385,6 +3442,8 @@
             for (let entry of data.content) {
                 if (entry.type === 'text') {
                     items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+                } else if (entry.type === 'hr') {
+                    items.push(new HorizontalRuleLink());
                 } else if (entry.type === 'newline') {
                     items.push(new NewlineLink());
                 }

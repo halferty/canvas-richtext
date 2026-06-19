@@ -1,6 +1,6 @@
 import { Chain } from './Chain.js';
 import { FontProperties } from './FontProperties.js';
-import { TextLink, CursorLink, NewlineLink, VirtualNewlineLink } from './ChainLink.js';
+import { TextLink, CursorLink, NewlineLink, VirtualNewlineLink, HorizontalRuleLink } from './ChainLink.js';
 
 /**
  * CanvasEditor - Main editor class that manages the canvas, rendering, and user interactions
@@ -1178,6 +1178,8 @@ export class CanvasEditor {
             
             if (item instanceof TextLink) {
                 this.renderTextLink(item);
+            } else if (item instanceof HorizontalRuleLink) {
+                this.renderHorizontalRule(item);
             } else if (item instanceof CursorLink) {
                 this.renderCursor(item);
             }
@@ -1190,6 +1192,21 @@ export class CanvasEditor {
 
         // Scrollbar is drawn in screen space, on top of the content.
         this.renderScrollbar();
+    }
+
+    renderHorizontalRule(rule) {
+        // rule.computed.posY is the bottom of the (empty) line the rule owns;
+        // draw the line through the vertical middle of that line's text slot.
+        const posY = (rule.computed && rule.computed.posY) || 0;
+        const midOffset = this.defaultFontProperties.size * 0.75;
+        const y = posY - midOffset;
+
+        this.ctx.strokeStyle = this.options.horizontalRuleColor || 'rgba(0, 0, 0, 0.35)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, y);
+        this.ctx.lineTo(this.editorWidth, y);
+        this.ctx.stroke();
     }
 
     renderListMarkers() {
@@ -1729,6 +1746,14 @@ export class CanvasEditor {
         this.setList('number');
     }
 
+    // Insert a horizontal rule (divider) on its own line at the cursor.
+    insertHorizontalRule() {
+        this.takeSnapshot();
+        this.chain.insertHorizontalRule();
+        this.scrollToCursorOnNextRender = true;
+        this.render();
+    }
+
     toggleCenterAlign() {
         const paragraphIndex = this.getCurrentParagraphIndex();
         const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
@@ -1883,6 +1908,9 @@ export class CanvasEditor {
                     text: item.text,
                     font: item.intrinsic.fontProperties.toObject()
                 });
+            } else if (item instanceof HorizontalRuleLink) {
+                // Must precede NewlineLink: HorizontalRuleLink extends it.
+                content.push({ type: 'hr' });
             } else if (item instanceof NewlineLink) {
                 content.push({ type: 'newline' });
             }
@@ -1923,6 +1951,8 @@ export class CanvasEditor {
         for (let entry of data.content) {
             if (entry.type === 'text') {
                 items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+            } else if (entry.type === 'hr') {
+                items.push(new HorizontalRuleLink());
             } else if (entry.type === 'newline') {
                 items.push(new NewlineLink());
             }
