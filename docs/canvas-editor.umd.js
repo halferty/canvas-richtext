@@ -1592,6 +1592,8 @@
             this.paragraphLists = new Map();
             // Left indent applied to list paragraphs, in pixels.
             this.LIST_INDENT = 32;
+            // Counter for stable paragraph-boundary ids (see boundaryKey).
+            this._pidCounter = 0;
 
             // Find/Replace state
             this.findMatches = [];
@@ -1746,9 +1748,9 @@
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 } else if (ctrl) {
-                    this.chain.deleteWordLeft();
+                    this.remapAroundEdit(() => this.chain.deleteWordLeft());
                 } else {
-                    this.chain.backspacePressed();
+                    this.remapAroundEdit(() => this.chain.backspacePressed());
                 }
                 this.render();
             } else if (key === 'Delete') {
@@ -1757,9 +1759,9 @@
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 } else if (ctrl) {
-                    this.chain.deleteWordRight();
+                    this.remapAroundEdit(() => this.chain.deleteWordRight());
                 } else {
-                    this.chain.deleteForward();
+                    this.remapAroundEdit(() => this.chain.deleteForward());
                 }
                 this.render();
             } else if (key === 'Enter') {
@@ -1768,7 +1770,11 @@
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 }
-                this.chain.enterPressed();
+                // Split the current paragraph and carry its list/alignment onto the
+                // new line (auto-continue), shifting following paragraphs.
+                const splitPara = this.getCurrentParagraphIndex();
+                this.remapAroundEdit(() => this.chain.enterPressed());
+                this.continueParagraphAttributes(splitPara);
                 this.render();
             } else if (key === 'ArrowLeft') {
                 e.preventDefault();
@@ -1933,14 +1939,17 @@
                         this.deleteSelection();
                     }
 
-                    // Insert pasted text
-                    for (let char of text) {
-                        if (char === '\n') {
-                            this.chain.enterPressed();
-                        } else {
-                            this.chain.printableKeyPressed(char);
+                    // Insert pasted text, keeping existing paragraphs' attributes
+                    // attached as newlines shift their indices.
+                    this.remapAroundEdit(() => {
+                        for (let char of text) {
+                            if (char === '\n') {
+                                this.chain.enterPressed();
+                            } else {
+                                this.chain.printableKeyPressed(char);
+                            }
                         }
-                    }
+                    });
 
                     this.render();
                 }).catch(err => {
@@ -1977,10 +1986,15 @@
 
         deleteSelection() {
             if (!this.chain.hasSelection()) return;
+            // Deleting a selection can remove newlines (merging paragraphs); keep
+            // paragraph attributes attached to their boundaries across the edit.
+            this.remapAroundEdit(() => this._deleteSelectionRaw());
+        }
 
+        _deleteSelectionRaw() {
             const selStart = this.chain.selectionStart;
             const selEnd = this.chain.selectionEnd;
-            
+
             // Remove all items in selection range
             const items = this.chain.getItems();
             let pos = 0;
@@ -2037,6 +2051,10 @@
             if (this.startScrollbarDragIfHit(e.clientX - rect.left, e.clientY - rect.top)) {
                 return;
             }
+
+            // Any click on the canvas dismisses an open link editor; it reopens
+            // below if the click lands inside a link.
+            this.closeLinkPopup();
 
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
@@ -3232,6 +3250,80 @@
             this.chain.paragraphIndents = indents;
         }
 
+        // --- Stable paragraph attributes across structural edits ---------------
+        //
+        // Paragraph alignment and list type are stored by paragraph index, but
+        // paragraph indices shift when newlines are inserted or removed. To keep
+        // attributes attached to the right paragraph, each paragraph is identified
+        // by the *boundary* that starts it: the 'START' sentinel for paragraph 0,
+        // or the NewlineLink object preceding it otherwise. Those boundary objects
+        // survive edits, so capturing attributes by boundary identity and rebuilding
+        // the index maps afterwards is self-correcting for any edit.
+
+        // Stable id for a paragraph boundary (sentinel or a NewlineLink object).
+        boundaryKey(boundary) {
+            if (boundary === 'START') return 'START';
+            if (boundary._pid === undefined) {
+                boundary._pid = ++this._pidCounter;
+            }
+            return boundary._pid;
+        }
+
+        // Boundary that starts each paragraph, indexed by paragraph number.
+        paragraphBoundaries() {
+            const boundaries = ['START'];
+            for (const item of this.chain.getItems()) {
+                if (item instanceof NewlineLink) boundaries.push(item);
+            }
+            return boundaries;
+        }
+
+        // Snapshot the current attributes keyed by boundary identity.
+        captureParagraphAttributes() {
+            const boundaries = this.paragraphBoundaries();
+            const align = new Map();
+            const list = new Map();
+            for (const [idx, v] of this.paragraphAlignments) {
+                if (idx < boundaries.length) align.set(this.boundaryKey(boundaries[idx]), v);
+            }
+            for (const [idx, v] of this.paragraphLists) {
+                if (idx < boundaries.length) list.set(this.boundaryKey(boundaries[idx]), v);
+            }
+            return { align, list };
+        }
+
+        // Rebuild the index maps from a boundary-keyed snapshot after an edit.
+        restoreParagraphAttributes(saved) {
+            const boundaries = this.paragraphBoundaries();
+            const align = new Map();
+            const list = new Map();
+            for (let i = 0; i < boundaries.length; i++) {
+                const key = this.boundaryKey(boundaries[i]);
+                if (saved.align.has(key)) align.set(i, saved.align.get(key));
+                if (saved.list.has(key)) list.set(i, saved.list.get(key));
+            }
+            this.paragraphAlignments = align;
+            this.paragraphLists = list;
+            this.syncParagraphIndents();
+        }
+
+        // Run a structural edit while preserving paragraph attributes by identity.
+        remapAroundEdit(editFn) {
+            const saved = this.captureParagraphAttributes();
+            editFn();
+            this.restoreParagraphAttributes(saved);
+        }
+
+        // After splitting paragraph P (Enter), carry its attributes to the new
+        // paragraph P+1 so lists and alignment continue onto the next line.
+        continueParagraphAttributes(p) {
+            const align = this.paragraphAlignments.get(p);
+            if (align !== undefined) this.paragraphAlignments.set(p + 1, align);
+            const list = this.paragraphLists.get(p);
+            if (list !== undefined) this.paragraphLists.set(p + 1, list);
+            this.syncParagraphIndents();
+        }
+
         // Apply (or toggle off) a list type across the current paragraph range.
         setList(type) {
             this.takeSnapshot();
@@ -3407,12 +3499,14 @@
             const props = this.getFontPropertiesAtCursor();
             props.link = href;
 
-            if (end > start) {
-                this.chain.deleteCharRange(start, end);
-            }
-            if (text && text.length > 0) {
-                this.insertTextWithProperties(text, props);
-            }
+            this.remapAroundEdit(() => {
+                if (end > start) {
+                    this.chain.deleteCharRange(start, end);
+                }
+                if (text && text.length > 0) {
+                    this.insertTextWithProperties(text, props);
+                }
+            });
             this.chain.clearSelection();
             this.render();
         }
@@ -3686,6 +3780,10 @@
         setText(text) {
             // Clear the chain and insert text
             this.chain.items = [new CursorLink()];
+            // A fresh plain-text document has no paragraph-level attributes.
+            this.paragraphAlignments = new Map();
+            this.paragraphLists = new Map();
+            this.syncParagraphIndents();
             for (let char of text) {
                 if (char === '\n') {
                     this.chain.enterPressed();

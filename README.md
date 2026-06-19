@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-442%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-450%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -13,7 +13,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 - 🖱️ **Mouse interaction** - Click to position cursor anywhere in the text
 - 📱 **Touch support** - Tap to position the cursor and drag to scroll on touch devices
 - 📝 **Rich text support** - Multiple font sizes, families, weights, styles, text color, and highlight color
-- 📋 **Lists** - Bulleted and numbered lists with hanging indents and automatic numbering
+- 📋 **Lists** - Bulleted and numbered lists with hanging indents, automatic numbering, and Enter-to-continue
 - 🔗 **Hyperlinks** - Linked text with an inline edit popup; Ctrl/Cmd-click to open
 - ➖ **Horizontal rules** - Insert dividers that render on their own row
 - 💾 **Save & load** - Serialize the full formatted document to/from JSON for persistence and autosave
@@ -24,7 +24,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 442 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 450 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
