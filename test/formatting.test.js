@@ -405,6 +405,115 @@ describe('Text Formatting', () => {
             assert.strictEqual(helloItem.intrinsic.fontProperties.weight, 'bold');
         });
     });
+
+    describe('Partial Selection Boundaries Detail', () => {
+        // Walk the chain and return the value of a font property for every
+        // character position in document order. Newlines occupy one position
+        // (reported as null) to mirror the editor's flattened coordinate space.
+        function perCharProperty(editor, property) {
+            const result = [];
+            for (const item of editor.chain.getItems()) {
+                if (item.text !== undefined && item.constructor.name === 'TextLink') {
+                    for (let i = 0; i < item.text.length; i++) {
+                        result.push(item.intrinsic.fontProperties[property]);
+                    }
+                } else if (item.constructor.name === 'NewlineLink') {
+                    result.push(null);
+                }
+            }
+            return result;
+        }
+
+        it('should only format the selected characters, not the whole run', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('HelloWorld');
+
+            // Select characters [2, 7): "lloWo"
+            editor.chain.selectionStart = 2;
+            editor.chain.selectionEnd = 7;
+            editor.toggleBold();
+
+            const weights = perCharProperty(editor, 'weight');
+            const expected = ['normal', 'normal', 'bold', 'bold', 'bold', 'bold', 'bold', 'normal', 'normal', 'normal'];
+            assert.deepStrictEqual(weights, expected);
+        });
+
+        it('should leave the unselected head and tail untouched', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('abcdef');
+
+            editor.chain.selectionStart = 2;
+            editor.chain.selectionEnd = 4;
+            editor.setTextColor('#ff0000');
+
+            const colors = perCharProperty(editor, 'color');
+            assert.deepStrictEqual(colors, [
+                '#000000', '#000000', '#ff0000', '#ff0000', '#000000', '#000000'
+            ]);
+        });
+
+        it('should preserve total text and cursor when splitting a run', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('abcdef');
+
+            editor.chain.selectionStart = 1;
+            editor.chain.selectionEnd = 3;
+            editor.toggleItalic();
+
+            assert.strictEqual(editor.getText(), 'abcdef');
+            const cursorCount = editor.chain.getItems().filter(
+                item => item.constructor.name === 'CursorLink'
+            ).length;
+            assert.strictEqual(cursorCount, 1);
+        });
+
+        it('should re-coalesce runs when formatting is toggled back off', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('abcdef');
+
+            // Bold the middle, then bold it again to revert.
+            editor.chain.selectionStart = 2;
+            editor.chain.selectionEnd = 4;
+            editor.toggleBold();
+            editor.chain.selectionStart = 2;
+            editor.chain.selectionEnd = 4;
+            editor.toggleBold();
+
+            // Everything is back to 'normal', and the chain coalesced back to a
+            // single text run (no leftover fragments).
+            const weights = perCharProperty(editor, 'weight');
+            assert.deepStrictEqual(weights, ['normal', 'normal', 'normal', 'normal', 'normal', 'normal']);
+            const textRuns = editor.chain.getItems().filter(
+                item => item.constructor.name === 'TextLink'
+            );
+            assert.strictEqual(textRuns.length, 1);
+        });
+
+        it('should format a selection spanning multiple existing runs', () => {
+            const canvas = createCanvas(800, 600);
+            const editor = new CanvasEditor(canvas);
+            editor.setText('abcdef');
+
+            // First make "cd" bold, creating run boundaries.
+            editor.chain.selectionStart = 2;
+            editor.chain.selectionEnd = 4;
+            editor.toggleBold();
+
+            // Now color a range [1, 5) that crosses those boundaries.
+            editor.chain.selectionStart = 1;
+            editor.chain.selectionEnd = 5;
+            editor.setTextColor('#00ff00');
+
+            const colors = perCharProperty(editor, 'color');
+            assert.deepStrictEqual(colors, [
+                '#000000', '#00ff00', '#00ff00', '#00ff00', '#00ff00', '#000000'
+            ]);
+        });
+    });
 });
 
 describe('Text Alignment', () => {

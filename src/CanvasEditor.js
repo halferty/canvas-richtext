@@ -1657,26 +1657,54 @@ export class CanvasEditor {
 
     applyFormattingToSelection(property, valueFn) {
         const items = this.chain.getItems();
-        let pos = 0;
         const selStart = this.chain.selectionStart;
         const selEnd = this.chain.selectionEnd;
+        const newItems = [];
+        let pos = 0;
 
         for (let item of items) {
             if (item instanceof TextLink) {
                 const itemStart = pos;
                 const itemEnd = pos + item.text.length;
+                pos = itemEnd;
 
-                // If this item overlaps with the selection, update its property
-                if (itemEnd > selStart && itemStart < selEnd) {
-                    const currentValue = item.intrinsic.fontProperties[property];
-                    item.intrinsic.fontProperties[property] = valueFn(currentValue);
+                // No overlap with the selection: keep the run untouched.
+                if (itemEnd <= selStart || itemStart >= selEnd) {
+                    newItems.push(item);
+                    continue;
                 }
-                pos += item.text.length;
-            } else if (item instanceof NewlineLink) {
-                pos += 1;
+
+                // The run partially (or fully) overlaps the selection. Split it
+                // at the selection boundaries so formatting applies only to the
+                // selected characters. recalc() re-coalesces any runs that end
+                // up adjacent with matching properties.
+                const fontProps = item.intrinsic.fontProperties;
+                const s = Math.max(0, selStart - itemStart);
+                const e = Math.min(item.text.length, selEnd - itemStart);
+
+                // Unselected head, if any.
+                if (s > 0) {
+                    newItems.push(new TextLink(item.text.substring(0, s), fontProps.clone()));
+                }
+
+                // Selected middle: apply the formatting change.
+                const selectedProps = fontProps.clone();
+                selectedProps[property] = valueFn(selectedProps[property]);
+                newItems.push(new TextLink(item.text.substring(s, e), selectedProps));
+
+                // Unselected tail, if any.
+                if (e < item.text.length) {
+                    newItems.push(new TextLink(item.text.substring(e), fontProps.clone()));
+                }
+            } else {
+                if (item instanceof NewlineLink) {
+                    pos += 1;
+                }
+                newItems.push(item);
             }
         }
 
+        this.chain.items = newItems;
         this.chain.recalc();
     }
 
