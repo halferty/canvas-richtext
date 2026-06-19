@@ -122,7 +122,7 @@ export class HorizontalRuleLink extends NewlineLink {}
  * optional `full` URL opened on click and `alt` text.
  */
 export class ImageLink extends NewlineLink {
-    constructor({ src, full = null, width = 0, height = 0, alt = '' } = {}) {
+    constructor({ src, full = null, width = 0, height = 0, alt = '', align = 'center' } = {}) {
         super();
         this.intrinsic = {
             ...this.intrinsic,
@@ -130,7 +130,8 @@ export class ImageLink extends NewlineLink {
             full,
             width,
             height,
-            alt
+            alt,
+            align
         };
     }
 }

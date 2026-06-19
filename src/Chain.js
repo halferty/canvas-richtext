@@ -334,10 +334,20 @@ export class Chain {
                         posY
                     };
                     if (isImageLine) {
-                        // Centered box; posY is the bottom of the line.
+                        // posY is the bottom of the line; x follows the image's
+                        // justification within the content width.
                         const { drawWidth, drawHeight } = this.imageDrawSize(this.items[i]);
+                        const align = this.items[i].intrinsic.align || 'center';
+                        let x;
+                        if (align === 'left') {
+                            x = 0;
+                        } else if (align === 'right') {
+                            x = Math.max(0, this.widthPixels - drawWidth);
+                        } else {
+                            x = Math.max(0, (this.widthPixels - drawWidth) / 2);
+                        }
                         this.items[i].computed.box = {
-                            x: Math.max(0, (this.widthPixels - drawWidth) / 2),
+                            x,
                             y: posY - drawHeight - this.IMAGE_VMARGIN,
                             w: drawWidth,
                             h: drawHeight

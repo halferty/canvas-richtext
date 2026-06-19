@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-478%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-487%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -16,7 +16,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 - 📋 **Lists** - Bulleted and numbered lists with hanging indents, automatic numbering, and Enter-to-continue
 - 🔗 **Hyperlinks** - Linked text with an inline edit popup; Ctrl/Cmd-click to open
 - ➖ **Horizontal rules** - Insert dividers that render on their own row
-- 🖼 **Images** - Bring-your-own uploader: show a thumbnail in the canvas, open the full image on click
+- 🖼 **Images** - Bring-your-own uploader: a thumbnail block you can select, resize (corner handles), justify, and drag to reposition; the full-size URL is captured in the JSON
 - ↩️ **Lossless undo/redo** - Full-fidelity history covering formatting, lists, rules, links, alignment, and cursor position
 - 💾 **Save & load** - Serialize the full formatted document to/from JSON for persistence and autosave
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
@@ -26,7 +26,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 478 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 487 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -180,7 +180,8 @@ new CanvasEditor(canvas: HTMLCanvasElement, options?: CanvasEditorOptions)
 - **`toggleBulletList(): void`** - Toggles a bulleted list across the selected paragraph(s)
 - **`toggleNumberedList(): void`** - Toggles a numbered list across the selected paragraph(s)
 - **`insertHorizontalRule(): void`** - Inserts a horizontal rule (divider) on its own line at the cursor
-- **`insertImage({ src, full?, width, height, alt? }): void`** - Inserts a block image. `src` is the thumbnail shown in the canvas; the optional `full` URL opens in a lightbox on click. Bring your own uploader/resizer — the editor only displays the URLs you give it
+- **`insertImage({ src, full?, width, height, alt?, align? }): void`** - Inserts a block image. `src` is the thumbnail drawn in the canvas; the optional `full` URL is captured in the document/JSON (displaying it full-size is a presentation concern, left to your app). Bring your own uploader/resizer — the editor only stores and shows the URLs you give it. Once inserted, an image can be selected (click), resized (corner handles), justified (`setImageAlignment`), dragged to a new position, and deleted (Backspace/Delete)
+- **`setImageAlignment('left' | 'center' | 'right'): void`** - Justifies the currently selected image
 - **`setLink(url: string | null): void`** - Sets/clears the link on the current selection, preserving its text
 - **`applyLink(text: string, url: string): void`** - Creates or updates a link with explicit display text and URL
 - **`removeLink(): void`** - Removes the link at the cursor, keeping its text

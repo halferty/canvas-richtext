@@ -22,7 +22,7 @@ function imageLinks(editor) {
     return editor.chain.getItems().filter(i => i instanceof ImageLink);
 }
 
-const SAMPLE = { src: 'https://cdn/thumb.jpg', full: 'https://cdn/full.jpg', width: 400, height: 300, alt: 'A cat' };
+const SAMPLE = { src: 'https://cdn/thumb.jpg', full: 'https://cdn/full.jpg', width: 400, height: 300, alt: 'A cat', align: 'center' };
 
 describe('Images', () => {
     describe('Insertion & layout', () => {
@@ -120,12 +120,101 @@ describe('Images', () => {
             assert.doesNotThrow(() => editor.render());
         });
 
-        it('should treat the popup/lightbox API as a no-op without a DOM', () => {
-            const canvas = createCanvas(800, 600);
-            const editor = new CanvasEditor(canvas);
-            editor.insertImage(SAMPLE);
-            assert.doesNotThrow(() => editor.openImageLightbox('https://cdn/full.jpg', 'alt'));
-            assert.doesNotThrow(() => editor.closeImageLightbox());
+    });
+
+    describe('Selection, resize, justify & move', () => {
+        function freshWithImage() {
+            const editor = new CanvasEditor(createCanvas(800, 600));
+            editor.setText('caption');
+            editor.insertImage({ src: 'x', full: 'https://cdn/full.jpg', width: 400, height: 200, alt: '' });
+            editor.render();
+            return editor;
+        }
+
+        it('should select the image it was inserted as', () => {
+            const editor = freshWithImage();
+            assert.ok(editor.selectedImage instanceof ImageLink);
+        });
+
+        it('should expose four corner handles for the selected image', () => {
+            const editor = freshWithImage();
+            const handles = editor.getImageHandles(editor.selectedImage);
+            assert.deepStrictEqual(Object.keys(handles).sort(), ['ne', 'nw', 'se', 'sw']);
+            // se handle is near the bottom-right corner of the box.
+            const b = editor.selectedImage.computed.box;
+            assert.ok(Math.abs(handles.se.x - (b.x + b.w)) <= editor.imageHandleSize);
+        });
+
+        it('should hit-test handles and the image body', () => {
+            const editor = freshWithImage();
+            const b = editor.selectedImage.computed.box;
+            assert.strictEqual(editor.imageHandleAt(b.x + b.w, b.y + b.h), 'se');
+            assert.strictEqual(editor.imageHandleAt(b.x + b.w / 2, b.y + b.h / 2), null);
+        });
+
+        it('should resize to a target width, preserving aspect ratio', () => {
+            const editor = freshWithImage();
+            editor.resizeSelectedImageToWidth(200); // was 400x200 (2:1)
+            assert.strictEqual(editor.selectedImage.intrinsic.width, 200);
+            assert.strictEqual(editor.selectedImage.intrinsic.height, 100);
+        });
+
+        it('should clamp resize to the content width', () => {
+            const editor = freshWithImage();
+            editor.resizeSelectedImageToWidth(99999);
+            assert.strictEqual(editor.selectedImage.intrinsic.width, editor.editorWidth);
+        });
+
+        it('should justify left / right / center via the box position', () => {
+            const editor = freshWithImage();
+
+            editor.setImageAlignment('left');
+            assert.strictEqual(editor.selectedImage.computed.box.x, 0);
+
+            editor.setImageAlignment('right');
+            const b = editor.selectedImage.computed.box;
+            assert.strictEqual(Math.round(b.x + b.w), editor.editorWidth);
+
+            editor.setImageAlignment('center');
+            const c = editor.selectedImage.computed.box;
+            assert.strictEqual(c.x, (editor.editorWidth - c.w) / 2);
+        });
+
+        it('should delete the selected image', () => {
+            const editor = freshWithImage();
+            editor.deleteSelectedImage();
+            assert.strictEqual(imageLinks(editor).length, 0);
+            assert.strictEqual(editor.selectedImage, null);
+        });
+
+        it('should move the image to a new position without losing it', () => {
+            const editor = new CanvasEditor(createCanvas(800, 600));
+            editor.setText('one\ntwo\nthree');
+            editor.chain.moveCursorToCharPosition(0); // top of document
+            editor.insertImage({ src: 'x', width: 100, height: 100 });
+            editor.render();
+
+            const totalChars = editor.chain.getTotalChars();
+            // Move it near the end of the document.
+            editor.moveSelectedImageToCharPos(totalChars);
+            editor.render();
+
+            assert.strictEqual(imageLinks(editor).length, 1);
+            // Same image object, relocated.
+            assert.ok(editor.chain.getItems().includes(editor.selectedImage));
+        });
+
+        it('should clear the image selection when clicking text / other keys', () => {
+            const editor = freshWithImage();
+            editor.clearImageSelection();
+            assert.strictEqual(editor.selectedImage, null);
+        });
+
+        it('should drop the selection when the document is rebuilt', () => {
+            const editor = freshWithImage();
+            const data = editor.toJSON();
+            editor.fromJSON(data);
+            assert.strictEqual(editor.selectedImage, null);
         });
     });
 

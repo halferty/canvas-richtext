@@ -128,7 +128,7 @@
      * optional `full` URL opened on click and `alt` text.
      */
     class ImageLink extends NewlineLink {
-        constructor({ src, full = null, width = 0, height = 0, alt = '' } = {}) {
+        constructor({ src, full = null, width = 0, height = 0, alt = '', align = 'center' } = {}) {
             super();
             this.intrinsic = {
                 ...this.intrinsic,
@@ -136,7 +136,8 @@
                 full,
                 width,
                 height,
-                alt
+                alt,
+                align
             };
         }
     }
@@ -466,10 +467,20 @@
                             posY
                         };
                         if (isImageLine) {
-                            // Centered box; posY is the bottom of the line.
+                            // posY is the bottom of the line; x follows the image's
+                            // justification within the content width.
                             const { drawWidth, drawHeight } = this.imageDrawSize(this.items[i]);
+                            const align = this.items[i].intrinsic.align || 'center';
+                            let x;
+                            if (align === 'left') {
+                                x = 0;
+                            } else if (align === 'right') {
+                                x = Math.max(0, this.widthPixels - drawWidth);
+                            } else {
+                                x = Math.max(0, (this.widthPixels - drawWidth) / 2);
+                            }
                             this.items[i].computed.box = {
-                                x: Math.max(0, (this.widthPixels - drawWidth) / 2),
+                                x,
                                 y: posY - drawHeight - this.IMAGE_VMARGIN,
                                 w: drawWidth,
                                 h: drawHeight
@@ -1735,6 +1746,11 @@
             // Counter for stable paragraph-boundary ids (see boundaryKey).
             this._pidCounter = 0;
 
+            // Currently selected block image (for resize/move/justify), or null.
+            this.selectedImage = null;
+            // Side length of an image's square resize handles, in pixels.
+            this.imageHandleSize = 10;
+
             // Find/Replace state
             this.findMatches = [];
             this.currentMatchIndex = -1;
@@ -1879,6 +1895,24 @@
                 this.toggleUnderline();
                 this.resetCursorBlink();
                 return;
+            }
+
+            // A selected image consumes Delete/Backspace (remove) and Escape
+            // (deselect); any other key drops the image selection and falls through
+            // to normal editing.
+            if (this.selectedImage) {
+                if (key === 'Backspace' || key === 'Delete') {
+                    e.preventDefault();
+                    this.deleteSelectedImage();
+                    this.resetCursorBlink();
+                    return;
+                }
+                if (key === 'Escape') {
+                    e.preventDefault();
+                    this.clearImageSelection();
+                    return;
+                }
+                this.clearImageSelection();
             }
 
             // Handle editor keys
@@ -2207,13 +2241,30 @@
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
-            // Clicking a block image opens its full-size view (if one was provided).
-            const clickedImage = this.imageAt(x, y);
-            if (clickedImage && clickedImage.intrinsic.full) {
-                this.openImageLightbox(clickedImage.intrinsic.full, clickedImage.intrinsic.alt);
+            // Image interactions take precedence over text positioning.
+            // 1) Grabbing a resize handle of the already-selected image.
+            const handle = this.imageHandleAt(x, y);
+            if (handle) {
+                this.takeSnapshot();
+                this._imageResizeHandle = handle;
+                this.isMouseDown = true;
                 this.canvas.focus();
                 return;
             }
+            // 2) Clicking an image selects it; a subsequent drag moves it.
+            const clickedImage = this.imageAt(x, y);
+            if (clickedImage) {
+                this.selectImage(clickedImage);
+                this._imageMoveCandidate = clickedImage;
+                this._imageMoving = false;
+                this.mouseDownX = x;
+                this.mouseDownY = y;
+                this.isMouseDown = true;
+                this.canvas.focus();
+                return;
+            }
+            // 3) Clicking elsewhere clears any image selection.
+            this.clearImageSelection();
 
             // Track click count for double/triple click
             const now = Date.now();
@@ -2309,8 +2360,21 @@
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
+            // Resizing the selected image by dragging a handle.
+            if (this._imageResizeHandle) {
+                this.resizeSelectedImageToWidth(this.imageResizeWidthFromPointer(x));
+                return;
+            }
+
             // Calculate drag distance
             const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
+
+            // Dragging the selected image to a new position.
+            if (this._imageMoveCandidate && dragDistance >= 5) {
+                this._imageMoving = true;
+                if (this.canvas.style) this.canvas.style.cursor = 'grabbing';
+                return;
+            }
 
             // Check if we should start dragging selected text
             if (this.draggedText && !this.isDragging && dragDistance >= 5) {
@@ -2356,6 +2420,27 @@
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
+
+            // Finish an image resize.
+            if (this._imageResizeHandle) {
+                this._imageResizeHandle = null;
+                this.isMouseDown = false;
+                return;
+            }
+
+            // Finish an image move (drop it at the nearest position), or just
+            // register the selecting click.
+            if (this._imageMoveCandidate) {
+                if (this._imageMoving) {
+                    const pos = this.chain.charPositionAtXY(x, y);
+                    this.moveSelectedImageToCharPos(pos);
+                    if (this.canvas.style) this.canvas.style.cursor = 'text';
+                }
+                this._imageMoveCandidate = null;
+                this._imageMoving = false;
+                this.isMouseDown = false;
+                return;
+            }
 
             // Handle drag and drop completion
             if (this.isDragging && this.draggedText) {
@@ -2871,6 +2956,9 @@
             // Draw bullet/number markers in the left gutter of list paragraphs.
             this.renderListMarkers();
 
+            // Draw the selection outline + resize handles for a selected image.
+            this.renderImageSelection();
+
             this.ctx.restore();
 
             // Scrollbar is drawn in screen space, on top of the content.
@@ -2902,6 +2990,29 @@
                 : (image.intrinsic.alt || 'Loading image…');
             this.ctx.fillText(label, box.x + 8, box.y + 8);
             this.ctx.textBaseline = 'alphabetic';
+        }
+
+        renderImageSelection() {
+            const image = this.selectedImage;
+            if (!(image instanceof ImageLink)) return;
+            const b = image.computed && image.computed.box;
+            if (!b) return;
+
+            // Selection outline.
+            this.ctx.strokeStyle = '#0078d7';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+            // Corner resize handles.
+            const handles = this.getImageHandles(image);
+            this.ctx.lineWidth = 1;
+            for (const name of Object.keys(handles)) {
+                const r = handles[name];
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillRect(r.x, r.y, r.w, r.h);
+                this.ctx.strokeStyle = '#0078d7';
+                this.ctx.strokeRect(r.x, r.y, r.w, r.h);
+            }
         }
 
         renderHorizontalRule(rule) {
@@ -3585,12 +3696,14 @@
         // --- Images -----------------------------------------------------------
 
         // Insert a block image on its own line. The caller (its uploader/resizer)
-        // supplies the thumbnail `src`, an optional full-size `full` URL opened on
-        // click, the display `width`/`height`, and `alt` text.
-        insertImage({ src, full = null, width = 0, height = 0, alt = '' }) {
+        // supplies the thumbnail `src`, an optional full-size `full` URL (captured
+        // in the document/JSON but not opened by the editor — display is a
+        // presentation concern), the display `width`/`height`, `alt`, and `align`.
+        insertImage({ src, full = null, width = 0, height = 0, alt = '', align = 'center' }) {
             this.takeSnapshot();
-            const link = new ImageLink({ src, full, width, height, alt });
+            const link = new ImageLink({ src, full, width, height, alt, align });
             this.remapAroundEdit(() => this.chain.insertBlock(link));
+            this.selectedImage = link;
             this.scrollToCursorOnNextRender = true;
             this.render();
         }
@@ -3636,52 +3749,123 @@
             return null;
         }
 
-        // Open the full-size image in a simple lightbox overlay (browser only).
-        openImageLightbox(full, alt = '') {
-            if (typeof document === 'undefined' || !full) return;
+        // --- Image selection / resize / move / justify ------------------------
 
-            if (!this.imageLightbox) {
-                const overlay = document.createElement('div');
-                overlay.className = 'canvas-richtext-image-lightbox';
-                Object.assign(overlay.style, {
-                    position: 'fixed',
-                    inset: '0',
-                    display: 'none',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'rgba(0,0,0,0.8)',
-                    zIndex: '10001',
-                    cursor: 'zoom-out'
-                });
-                const img = document.createElement('img');
-                Object.assign(img.style, {
-                    maxWidth: '90vw',
-                    maxHeight: '90vh',
-                    boxShadow: '0 4px 30px rgba(0,0,0,0.5)'
-                });
-                overlay.appendChild(img);
-                overlay.addEventListener('click', () => this.closeImageLightbox());
-                document.body.appendChild(overlay);
-                this.imageLightbox = overlay;
-                this.imageLightboxImg = img;
-                this._lightboxKeyHandler = (e) => {
-                    if (e.key === 'Escape') this.closeImageLightbox();
-                };
-            }
-
-            this.imageLightboxImg.src = full;
-            this.imageLightboxImg.alt = alt;
-            this.imageLightbox.style.display = 'flex';
-            document.addEventListener('keydown', this._lightboxKeyHandler);
+        selectImage(image) {
+            this.selectedImage = (image instanceof ImageLink) ? image : null;
+            // Selecting an image collapses any text selection.
+            this.chain.clearSelection();
+            this.render();
         }
 
-        closeImageLightbox() {
-            if (this.imageLightbox) {
-                this.imageLightbox.style.display = 'none';
-                if (this._lightboxKeyHandler) {
-                    document.removeEventListener('keydown', this._lightboxKeyHandler);
+        clearImageSelection() {
+            if (this.selectedImage) {
+                this.selectedImage = null;
+                this.render();
+            }
+        }
+
+        // Square resize handles at the four corners of an image's box, in
+        // content space. Returns null when the image has no laid-out box.
+        getImageHandles(image) {
+            const b = image && image.computed && image.computed.box;
+            if (!b) return null;
+            const s = this.imageHandleSize;
+            const half = s / 2;
+            return {
+                nw: { x: b.x - half, y: b.y - half, w: s, h: s },
+                ne: { x: b.x + b.w - half, y: b.y - half, w: s, h: s },
+                sw: { x: b.x - half, y: b.y + b.h - half, w: s, h: s },
+                se: { x: b.x + b.w - half, y: b.y + b.h - half, w: s, h: s }
+            };
+        }
+
+        // Name of the selected image's handle at a point, or null.
+        imageHandleAt(x, y) {
+            if (!this.selectedImage) return null;
+            const handles = this.getImageHandles(this.selectedImage);
+            if (!handles) return null;
+            for (const name of Object.keys(handles)) {
+                const r = handles[name];
+                if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+                    return name;
                 }
             }
+            return null;
+        }
+
+        // Resize the selected image to a target display width, preserving aspect
+        // ratio and clamping to a sensible range. Does not snapshot (the caller
+        // snapshots once at the start of a drag).
+        resizeSelectedImageToWidth(targetWidth) {
+            const image = this.selectedImage;
+            if (!image) return;
+            const iw = image.intrinsic.width || 1;
+            const ih = image.intrinsic.height || 1;
+            const aspect = iw / ih;
+            const minW = 24;
+            const maxW = this.editorWidth;
+            const w = Math.max(minW, Math.min(maxW, targetWidth));
+            image.intrinsic.width = Math.round(w);
+            image.intrinsic.height = Math.round(w / aspect);
+            this.chain.recalc();
+            this.render();
+        }
+
+        // Target width implied by a pointer X for the selected image, given its
+        // justification (the anchored edge stays put as it resizes).
+        imageResizeWidthFromPointer(x) {
+            const align = this.selectedImage
+                ? (this.selectedImage.intrinsic.align || 'center')
+                : 'center';
+            if (align === 'left') return x;
+            if (align === 'right') return this.editorWidth - x;
+            return Math.abs(x - this.editorWidth / 2) * 2;
+        }
+
+        // Set the selected image's justification: 'left' | 'center' | 'right'.
+        setImageAlignment(align) {
+            if (!this.selectedImage) return;
+            this.takeSnapshot();
+            this.selectedImage.intrinsic.align = align;
+            this.chain.recalc();
+            this.render();
+        }
+
+        deleteSelectedImage() {
+            const image = this.selectedImage;
+            if (!image) return;
+            this.takeSnapshot();
+            this.remapAroundEdit(() => {
+                const idx = this.chain.items.indexOf(image);
+                if (idx !== -1) this.chain.items.splice(idx, 1);
+            });
+            this.selectedImage = null;
+            this.render();
+        }
+
+        // Relocate the selected image so it sits at the given flattened character
+        // position (its own block line). Used by drag-to-move.
+        moveSelectedImageToCharPos(pos) {
+            const image = this.selectedImage;
+            if (!image) return;
+            this.takeSnapshot();
+            this.remapAroundEdit(() => {
+                const items = this.chain.items;
+                const from = items.indexOf(image);
+                if (from === -1) return;
+
+                // The image occupies one character; removing it shifts positions
+                // after it down by one.
+                const imageStart = this.chain.getCharPosition(from, 0);
+                items.splice(from, 1);
+                let target = pos > imageStart ? pos - 1 : pos;
+
+                this.chain.moveCursorToCharPosition(target);
+                this.chain.insertBlock(image);
+            });
+            this.chain.recalc();
+            this.render();
         }
 
         // --- Hyperlinks -------------------------------------------------------
@@ -4097,6 +4281,7 @@
         setText(text) {
             // Clear the chain and insert text
             this.chain.items = [new CursorLink()];
+            this.selectedImage = null;
             // A fresh plain-text document has no paragraph-level attributes.
             this.paragraphAlignments = new Map();
             this.paragraphLists = new Map();
@@ -4133,7 +4318,8 @@
                         full: item.intrinsic.full,
                         width: item.intrinsic.width,
                         height: item.intrinsic.height,
-                        alt: item.intrinsic.alt
+                        alt: item.intrinsic.alt,
+                        align: item.intrinsic.align
                     });
                 } else if (item instanceof HorizontalRuleLink) {
                     // Must precede NewlineLink: HorizontalRuleLink extends it.
@@ -4176,7 +4362,8 @@
                         full: entry.full,
                         width: entry.width,
                         height: entry.height,
-                        alt: entry.alt
+                        alt: entry.alt,
+                        align: entry.align
                     }));
                 } else if (entry.type === 'hr') {
                     items.push(new HorizontalRuleLink());
@@ -4186,6 +4373,8 @@
             }
             items.push(new CursorLink());
             this.chain.items = items;
+            // The previously selected image object is no longer in the chain.
+            this.selectedImage = null;
 
             // Restore paragraph alignments (keys are stringified in JSON objects).
             this.paragraphAlignments = new Map();
@@ -4497,17 +4686,6 @@
             if (this.linkPopup && this.linkPopup.parentNode) {
                 this.linkPopup.parentNode.removeChild(this.linkPopup);
                 this.linkPopup = null;
-            }
-
-            // Remove the image lightbox overlay if one was created.
-            if (this.imageLightbox) {
-                if (this._lightboxKeyHandler && typeof document !== 'undefined') {
-                    document.removeEventListener('keydown', this._lightboxKeyHandler);
-                }
-                if (this.imageLightbox.parentNode) {
-                    this.imageLightbox.parentNode.removeChild(this.imageLightbox);
-                }
-                this.imageLightbox = null;
             }
         }
 

@@ -1027,24 +1027,21 @@ Type away and explore the features...`;
             updateToolbar();
         });
 
-        // Alignment buttons
-        alignLeftBtn.addEventListener('click', () => {
-            editor.setAlignment('left');
+        // Alignment buttons — when a block image is selected they justify the
+        // image; otherwise they set the current paragraph's alignment.
+        function applyAlignment(dir) {
+            if (editor.selectedImage) {
+                editor.setImageAlignment(dir);
+            } else {
+                editor.setAlignment(dir);
+            }
             canvas.focus({ preventScroll: true });
             updateToolbar();
-        });
+        }
 
-        alignCenterBtn.addEventListener('click', () => {
-            editor.setAlignment('center');
-            canvas.focus({ preventScroll: true });
-            updateToolbar();
-        });
-
-        alignRightBtn.addEventListener('click', () => {
-            editor.setAlignment('right');
-            canvas.focus({ preventScroll: true });
-            updateToolbar();
-        });
+        alignLeftBtn.addEventListener('click', () => applyAlignment('left'));
+        alignCenterBtn.addEventListener('click', () => applyAlignment('center'));
+        alignRightBtn.addEventListener('click', () => applyAlignment('right'));
 
         // List controls
         document.getElementById('bullet-list-btn').addEventListener('click', () => {
