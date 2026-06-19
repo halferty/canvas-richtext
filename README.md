@@ -4,7 +4,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-410%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-421%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
@@ -13,6 +13,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 - 🖱️ **Mouse interaction** - Click to position cursor anywhere in the text
 - 📱 **Touch support** - Tap to position the cursor and drag to scroll on touch devices
 - 📝 **Rich text support** - Multiple font sizes, families, weights, styles, text color, and highlight color
+- 📋 **Lists** - Bulleted and numbered lists with hanging indents and automatic numbering
 - 💾 **Save & load** - Serialize the full formatted document to/from JSON for persistence and autosave
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
 - 📜 **Scrolling** - Mouse-wheel, draggable scrollbar, and PageUp/PageDown with cursor auto-scroll for long documents
@@ -21,7 +22,7 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 ## Testing
 
-This library features **100% synthetic testing** - all 410 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 421 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -172,6 +173,8 @@ new CanvasEditor(canvas: HTMLCanvasElement, options?: CanvasEditorOptions)
 - **`setFontFamily(family: string): void`** - Changes the font family for new text
 - **`setTextColor(color: string): void`** - Sets the text color (applies to the selection, or to new text)
 - **`setHighlightColor(color: string | null): void`** - Sets the highlight/background color (pass `null` to clear)
+- **`toggleBulletList(): void`** - Toggles a bulleted list across the selected paragraph(s)
+- **`toggleNumberedList(): void`** - Toggles a numbered list across the selected paragraph(s)
 - **`toJSON(): object`** - Serializes the full document — text, per-run formatting, and paragraph alignment — to a plain, JSON-stringifiable object
 - **`fromJSON(data: object | string): void`** - Restores a document previously produced by `toJSON()` (accepts the object or its JSON string)
 - **`resize(width: number, height: number): void`** - Resizes the canvas

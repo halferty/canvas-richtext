@@ -87,6 +87,11 @@ export class CanvasEditor {
         // Paragraph alignment (keyed by paragraph index)
         this.paragraphAlignments = new Map();
 
+        // Paragraph list type, 'bullet' | 'number' (keyed by paragraph index)
+        this.paragraphLists = new Map();
+        // Left indent applied to list paragraphs, in pixels.
+        this.LIST_INDENT = 32;
+
         // Find/Replace state
         this.findMatches = [];
         this.currentMatchIndex = -1;
@@ -1178,10 +1183,62 @@ export class CanvasEditor {
             }
         }
 
+        // Draw bullet/number markers in the left gutter of list paragraphs.
+        this.renderListMarkers();
+
         this.ctx.restore();
 
         // Scrollbar is drawn in screen space, on top of the content.
         this.renderScrollbar();
+    }
+
+    renderListMarkers() {
+        if (this.paragraphLists.size === 0) return;
+        const items = this.chain.getItems();
+
+        // Total paragraph count (newlines + 1) so numbering can be computed
+        // for every paragraph, then look up each list paragraph's marker text.
+        let totalParagraphs = 1;
+        for (const item of items) {
+            if (item instanceof NewlineLink) totalParagraphs++;
+        }
+
+        // Sequential numbering: consecutive 'number' paragraphs count up; any
+        // non-numbered paragraph (bullet or plain) restarts the sequence.
+        const markerText = new Map();
+        let counter = 0;
+        for (let p = 0; p < totalParagraphs; p++) {
+            const type = this.paragraphLists.get(p);
+            if (type === 'number') {
+                counter++;
+                markerText.set(p, `${counter}.`);
+            } else {
+                counter = 0;
+                if (type === 'bullet') markerText.set(p, '•');
+            }
+        }
+
+        const gap = 8;
+        this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+        this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
+
+        // Draw each list paragraph's marker once, aligned to the baseline of
+        // its first visual line (the first item in the paragraph carrying a Y).
+        const drawn = new Set();
+        let paragraphIdx = 0;
+        for (const item of items) {
+            if (!drawn.has(paragraphIdx) && markerText.has(paragraphIdx) &&
+                !(item instanceof VirtualNewlineLink) &&
+                item.computed && typeof item.computed.posY === 'number') {
+                const marker = markerText.get(paragraphIdx);
+                const width = this.ctx.measureText(marker).width;
+                this.ctx.fillText(marker, this.LIST_INDENT - gap - width, item.computed.posY);
+                drawn.add(paragraphIdx);
+            }
+            if (item instanceof NewlineLink) {
+                paragraphIdx++;
+            }
+        }
     }
 
     renderSelection() {
@@ -1595,6 +1652,83 @@ export class CanvasEditor {
         this.render();
     }
 
+    // The paragraph index containing a given flattened character position
+    // (the number of real newlines strictly before that position).
+    paragraphIndexAtCharPos(target) {
+        const items = this.chain.getItems();
+        let para = 0;
+        let pos = 0;
+        for (const item of items) {
+            if (item instanceof TextLink) {
+                pos += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                if (pos < target) para++;
+                pos += 1;
+            }
+        }
+        return para;
+    }
+
+    // Inclusive [start, end] paragraph range covered by the selection, or the
+    // single paragraph at the cursor when there is no selection.
+    getParagraphRange() {
+        if (this.chain.hasSelection()) {
+            const selStart = this.chain.selectionStart;
+            const selEnd = this.chain.selectionEnd;
+            const startPara = this.paragraphIndexAtCharPos(selStart);
+            // Use selEnd - 1 so a selection ending exactly at a paragraph
+            // boundary does not pull in the following paragraph.
+            const endPara = this.paragraphIndexAtCharPos(Math.max(selStart, selEnd - 1));
+            return [startPara, endPara];
+        }
+        const p = this.getCurrentParagraphIndex();
+        return [p, p];
+    }
+
+    // List paragraphs reduce the chain's wrap width and gain a hanging indent.
+    syncParagraphIndents() {
+        const indents = new Map();
+        for (const [paragraphIndex] of this.paragraphLists) {
+            indents.set(paragraphIndex, this.LIST_INDENT);
+        }
+        this.chain.paragraphIndents = indents;
+    }
+
+    // Apply (or toggle off) a list type across the current paragraph range.
+    setList(type) {
+        this.takeSnapshot();
+        const [startPara, endPara] = this.getParagraphRange();
+
+        // If every paragraph in the range is already this type, toggle it off.
+        let allSame = true;
+        for (let p = startPara; p <= endPara; p++) {
+            if (this.paragraphLists.get(p) !== type) {
+                allSame = false;
+                break;
+            }
+        }
+
+        for (let p = startPara; p <= endPara; p++) {
+            if (allSame) {
+                this.paragraphLists.delete(p);
+            } else {
+                this.paragraphLists.set(p, type);
+            }
+        }
+
+        this.syncParagraphIndents();
+        this.chain.recalc();
+        this.render();
+    }
+
+    toggleBulletList() {
+        this.setList('bullet');
+    }
+
+    toggleNumberedList() {
+        this.setList('number');
+    }
+
     toggleCenterAlign() {
         const paragraphIndex = this.getCurrentParagraphIndex();
         const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
@@ -1618,11 +1752,12 @@ export class CanvasEditor {
 
             if (isLineEnd) {
                 const alignment = this.paragraphAlignments.get(currentParagraph) || 'left';
+                const indent = this.paragraphLists.has(currentParagraph) ? this.LIST_INDENT : 0;
 
-                // Recompute this visual line's base X layout from 0. Doing this
-                // every time keeps alignment idempotent across renders (offsets
-                // must not accumulate frame to frame).
-                let lineWidth = 0;
+                // Recompute this visual line's base X layout from the paragraph
+                // indent. Doing this every time keeps alignment idempotent
+                // across renders (offsets must not accumulate frame to frame).
+                let lineWidth = indent;
                 for (let j = lineStartIdx; j < i; j++) {
                     if (items[j].computed) {
                         items[j].computed.posX = lineWidth;
@@ -1758,10 +1893,16 @@ export class CanvasEditor {
             alignments[paragraphIndex] = alignment;
         }
 
+        const lists = {};
+        for (let [paragraphIndex, type] of this.paragraphLists) {
+            lists[paragraphIndex] = type;
+        }
+
         return {
             version: 1,
             content,
-            alignments
+            alignments,
+            lists
         };
     }
 
@@ -1796,6 +1937,15 @@ export class CanvasEditor {
                 this.paragraphAlignments.set(Number(key), data.alignments[key]);
             }
         }
+
+        // Restore paragraph list types and the matching wrap indents.
+        this.paragraphLists = new Map();
+        if (data.lists) {
+            for (let key of Object.keys(data.lists)) {
+                this.paragraphLists.set(Number(key), data.lists[key]);
+            }
+        }
+        this.syncParagraphIndents();
 
         // The loaded document becomes the new baseline.
         this.history = [];

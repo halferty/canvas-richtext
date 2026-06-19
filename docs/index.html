@@ -540,6 +540,11 @@
                 </div>
 
                 <div class="toolbar-group">
+                    <button id="bullet-list-btn" class="format-btn" title="Bulleted list">• List</button>
+                    <button id="numbered-list-btn" class="format-btn" title="Numbered list">1. List</button>
+                </div>
+
+                <div class="toolbar-group">
                     <label for="text-color">Text Color:</label>
                     <input type="color" id="text-color" value="#000000" title="Change text color">
                 </div>
@@ -1034,6 +1039,19 @@ Type away and explore the features...`;
 
         alignRightBtn.addEventListener('click', () => {
             editor.setAlignment('right');
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        // List controls
+        document.getElementById('bullet-list-btn').addEventListener('click', () => {
+            editor.toggleBulletList();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        document.getElementById('numbered-list-btn').addEventListener('click', () => {
+            editor.toggleNumberedList();
             canvas.focus({ preventScroll: true });
             updateToolbar();
         });

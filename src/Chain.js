@@ -18,6 +18,15 @@ export class Chain {
         this.selectionAnchor = null;
         // Total vertical extent of the laid-out content (set by recalc).
         this.contentHeight = 0;
+        // Per-paragraph left indent in pixels (keyed by paragraph index).
+        // Populated by the editor for list paragraphs so wrapping and the
+        // hanging indent are computed against the reduced content width.
+        this.paragraphIndents = new Map();
+    }
+
+    // Left indent (px) for a given paragraph index; 0 when not indented.
+    getParagraphIndent(paragraphIndex) {
+        return this.paragraphIndents.get(paragraphIndex) || 0;
     }
 
     printItems() {
@@ -167,7 +176,13 @@ export class Chain {
     }
 
     recalcXPositions() {
-        let posX = 0;
+        // Track the current paragraph so list paragraphs lay out (and wrap)
+        // against their indented left margin. The actual posX values are
+        // recomputed again by the editor's alignment pass; what matters here
+        // is that wrap points are chosen for the reduced available width.
+        let paragraphIdx = 0;
+        let indent = this.getParagraphIndent(paragraphIdx);
+        let posX = indent;
         for (let i = 0; i < this.items.length; i++) {
             if (this.items[i] instanceof TextLink) {
                 const width = this.items[i].measureText(this.ctx).width;
@@ -184,7 +199,7 @@ export class Chain {
                     if (!isFirstTextLinkOnLine) {
                         this.items.splice(i, 0, new VirtualNewlineLink());
                         i++;
-                        posX = 0;
+                        posX = indent;
                     }
                     let newItems = [];
                     let remaining = this.items[i].text;
@@ -228,7 +243,7 @@ export class Chain {
                     this.items.splice(i, 1, ...newItems);
                     i += newItems.length - 1;
                 } else if (posX + width > this.widthPixels) {
-                    posX = 0;
+                    posX = indent;
                     this.items[i].computed = {
                         ...this.items[i].computed,
                         posX
@@ -244,7 +259,10 @@ export class Chain {
                     posX += width;
                 }
             } else if (this.items[i] instanceof NewlineLink) {
-                posX = 0;
+                // A real newline starts the next paragraph at its own indent.
+                paragraphIdx++;
+                indent = this.getParagraphIndent(paragraphIdx);
+                posX = indent;
                 this.items[i].computed = {
                     ...this.items[i].computed,
                     posX
