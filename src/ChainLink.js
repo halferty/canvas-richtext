@@ -105,3 +105,11 @@ export class VirtualNewlineLink extends ChainLink {}
  * NewlineLink - Represents an actual newline character (user-created)
  */
 export class NewlineLink extends ChainLink {}
+
+/**
+ * HorizontalRuleLink - A divider rendered as a horizontal line on its own row.
+ * It extends NewlineLink so that all line-breaking, character-counting,
+ * navigation, and selection logic treats it like a line break; only its
+ * rendering and serialization differ.
+ */
+export class HorizontalRuleLink extends NewlineLink {}

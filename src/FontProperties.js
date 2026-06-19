@@ -4,7 +4,7 @@
 export class FontProperties {
     constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
                 underline = false, strikethrough = false, superscript = false, subscript = false,
-                color = '#000000') {
+                color = '#000000', backgroundColor = null, link = null) {
         this.size = size;
         this.family = family;
         this.weight = weight;
@@ -14,6 +14,10 @@ export class FontProperties {
         this.superscript = superscript;
         this.subscript = subscript;
         this.color = color;
+        // Highlight color drawn behind the glyphs. null means no highlight.
+        this.backgroundColor = backgroundColor;
+        // Hyperlink target (URL). null means the run is not a link.
+        this.link = link;
     }
 
     doPropertiesMatch(other) {
@@ -25,17 +29,56 @@ export class FontProperties {
                this.strikethrough === other.strikethrough &&
                this.superscript === other.superscript &&
                this.subscript === other.subscript &&
-               this.color === other.color;
+               this.color === other.color &&
+               this.backgroundColor === other.backgroundColor &&
+               this.link === other.link;
     }
 
     clone() {
         return new FontProperties(this.size, this.family, this.weight, this.style,
                                    this.underline, this.strikethrough, this.superscript, this.subscript,
-                                   this.color);
+                                   this.color, this.backgroundColor, this.link);
     }
 
     toFontString() {
         return `${this.style} ${this.weight} ${this.size}px ${this.family}`;
+    }
+
+    // Serialize to a plain object (for JSON document export).
+    toObject() {
+        return {
+            size: this.size,
+            family: this.family,
+            weight: this.weight,
+            style: this.style,
+            underline: this.underline,
+            strikethrough: this.strikethrough,
+            superscript: this.superscript,
+            subscript: this.subscript,
+            color: this.color,
+            backgroundColor: this.backgroundColor,
+            link: this.link
+        };
+    }
+
+    // Rebuild a FontProperties from a plain object produced by toObject().
+    // Missing fields fall back to constructor defaults so older documents
+    // (saved before a field existed) still load cleanly.
+    static fromObject(obj = {}) {
+        const d = new FontProperties();
+        return new FontProperties(
+            obj.size ?? d.size,
+            obj.family ?? d.family,
+            obj.weight ?? d.weight,
+            obj.style ?? d.style,
+            obj.underline ?? d.underline,
+            obj.strikethrough ?? d.strikethrough,
+            obj.superscript ?? d.superscript,
+            obj.subscript ?? d.subscript,
+            obj.color ?? d.color,
+            obj.backgroundColor ?? d.backgroundColor,
+            obj.link ?? d.link
+        );
     }
 
     // Toggle formatting

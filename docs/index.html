@@ -536,11 +536,25 @@
                 <div class="toolbar-group">
                     <button id="align-left-btn" class="format-btn" title="Align Left">⬅</button>
                     <button id="align-center-btn" class="format-btn" title="Align Center">↔</button>
+                    <button id="align-right-btn" class="format-btn" title="Align Right">➡</button>
+                </div>
+
+                <div class="toolbar-group">
+                    <button id="bullet-list-btn" class="format-btn" title="Bulleted list">• List</button>
+                    <button id="numbered-list-btn" class="format-btn" title="Numbered list">1. List</button>
+                    <button id="horizontal-rule-btn" class="format-btn" title="Insert horizontal rule">― Rule</button>
+                    <button id="link-btn" class="format-btn" title="Insert/edit link">🔗 Link</button>
                 </div>
 
                 <div class="toolbar-group">
                     <label for="text-color">Text Color:</label>
                     <input type="color" id="text-color" value="#000000" title="Change text color">
+                </div>
+
+                <div class="toolbar-group">
+                    <label for="highlight-color">Highlight:</label>
+                    <input type="color" id="highlight-color" value="#ffff00" title="Apply highlight color">
+                    <button id="clear-highlight-btn" class="format-btn" title="Remove highlight">✕</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -585,6 +599,8 @@
                 <button id="clear-formatting-btn" class="format-btn" title="Clear formatting">Clear Format</button>
                 <button id="clear-btn">Clear</button>
                 <button id="sample-text-btn">Load Sample Text</button>
+                <button id="save-btn" title="Save document to browser storage">💾 Save</button>
+                <button id="load-btn" title="Load saved document">📂 Load</button>
                 <button id="find-btn">Find</button>
                 <button id="find-replace-btn">Find & Replace</button>
             </div>
@@ -722,6 +738,9 @@
                     <div class="menu-item" data-action="align-center">
                         <span class="menu-label">Align Center</span>
                     </div>
+                    <div class="menu-item" data-action="align-right">
+                        <span class="menu-label">Align Right</span>
+                    </div>
                 </div>
             </div>
             <div class="menu-item menu-item-submenu" data-action="line-spacing">
@@ -846,6 +865,14 @@
                     <div><strong>Ctrl+Z</strong> - Undo</div>
                     <div><strong>Ctrl+Y</strong> - Redo</div>
                     <div><strong>Ctrl+A</strong> - Select All</div>
+                    <div><strong>Shift+Arrows</strong> - Select Text</div>
+                    <div><strong>Ctrl+←/→</strong> - Move by Word</div>
+                    <div><strong>Home/End</strong> - Line Start/End</div>
+                    <div><strong>Ctrl+Home/End</strong> - Doc Start/End</div>
+                    <div><strong>Ctrl+Backspace/Delete</strong> - Delete Word</div>
+                    <div><strong>PageUp/PageDown</strong> - Scroll a Page</div>
+                    <div><strong>Tab</strong> - Insert Spaces</div>
+                    <div><strong>Esc</strong> - Clear Selection</div>
                     <div><strong>Ctrl+C</strong> - Copy</div>
                     <div><strong>Ctrl+X</strong> - Cut</div>
                     <div><strong>Ctrl+V</strong> - Paste</div>
@@ -908,7 +935,10 @@ Type away and explore the features...`;
         const subscriptBtn = document.getElementById('subscript-btn');
         const alignLeftBtn = document.getElementById('align-left-btn');
         const alignCenterBtn = document.getElementById('align-center-btn');
+        const alignRightBtn = document.getElementById('align-right-btn');
         const textColorInput = document.getElementById('text-color');
+        const highlightColorInput = document.getElementById('highlight-color');
+        const clearHighlightBtn = document.getElementById('clear-highlight-btn');
         const fontSizeSelect = document.getElementById('font-size');
         const increaseFontBtn = document.getElementById('increase-font-btn');
         const decreaseFontBtn = document.getElementById('decrease-font-btn');
@@ -927,6 +957,9 @@ Type away and explore the features...`;
             fontSizeSelect.value = fontAtCursor.size;
             fontFamilySelect.value = fontAtCursor.family;
             textColorInput.value = fontAtCursor.color || '#000000';
+            if (fontAtCursor.backgroundColor) {
+                highlightColorInput.value = fontAtCursor.backgroundColor;
+            }
             lineSpacingSelect.value = editor.getLineSpacing();
 
             // Update formatting button active states
@@ -942,6 +975,7 @@ Type away and explore the features...`;
             const currentAlignment = editor.paragraphAlignments.get(paragraphIndex) || 'left';
             alignLeftBtn.classList.toggle('active', currentAlignment === 'left');
             alignCenterBtn.classList.toggle('active', currentAlignment === 'center');
+            alignRightBtn.classList.toggle('active', currentAlignment === 'right');
         }
 
         // Undo/Redo buttons
@@ -1005,9 +1039,51 @@ Type away and explore the features...`;
             updateToolbar();
         });
 
+        alignRightBtn.addEventListener('click', () => {
+            editor.setAlignment('right');
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        // List controls
+        document.getElementById('bullet-list-btn').addEventListener('click', () => {
+            editor.toggleBulletList();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        document.getElementById('numbered-list-btn').addEventListener('click', () => {
+            editor.toggleNumberedList();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        document.getElementById('horizontal-rule-btn').addEventListener('click', () => {
+            editor.insertHorizontalRule();
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        document.getElementById('link-btn').addEventListener('click', () => {
+            editor.openLinkPopup();
+        });
+
         // Text color control
         textColorInput.addEventListener('input', (e) => {
             editor.setTextColor(e.target.value);
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        // Highlight color controls
+        highlightColorInput.addEventListener('input', (e) => {
+            editor.setHighlightColor(e.target.value);
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
+        });
+
+        clearHighlightBtn.addEventListener('click', () => {
+            editor.setHighlightColor(null);
             canvas.focus({ preventScroll: true });
             updateToolbar();
         });
@@ -1057,6 +1133,24 @@ Type away and explore the features...`;
         document.getElementById('sample-text-btn').addEventListener('click', () => {
             editor.setText(welcomeText);
             updateToolbar();
+        });
+
+        // Save the full formatted document to localStorage via toJSON()
+        document.getElementById('save-btn').addEventListener('click', () => {
+            localStorage.setItem('canvas-richtext-demo', JSON.stringify(editor.toJSON()));
+            canvas.focus({ preventScroll: true });
+        });
+
+        // Restore the document via fromJSON()
+        document.getElementById('load-btn').addEventListener('click', () => {
+            const saved = localStorage.getItem('canvas-richtext-demo');
+            if (saved) {
+                editor.fromJSON(saved);
+                updateToolbar();
+            } else {
+                alert('No saved document found. Click "Save" first.');
+            }
+            canvas.focus({ preventScroll: true });
         });
 
         document.getElementById('find-btn').addEventListener('click', () => {
@@ -1211,6 +1305,9 @@ Type away and explore the features...`;
                     break;
                 case 'align-center':
                     editor.setAlignment('center');
+                    break;
+                case 'align-right':
+                    editor.setAlignment('right');
                     break;
                 case 'increase-font-size':
                     editor.increaseFontSize();

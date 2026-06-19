@@ -1,4 +1,4 @@
-import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink } from './ChainLink.js';
+import { TextLink, CursorLink, VirtualNewlineLink, NewlineLink, HorizontalRuleLink } from './ChainLink.js';
 
 /**
  * Chain - Manages the linked list of text, cursor, and newline elements
@@ -13,6 +13,20 @@ export class Chain {
         this.currentFontProperties = defaultFontProperties;
         this.selectionStart = null;
         this.selectionEnd = null;
+        // Fixed end of a keyboard (shift+arrow) selection. The cursor marks
+        // the moving "focus" end; this marks the stationary "anchor" end.
+        this.selectionAnchor = null;
+        // Total vertical extent of the laid-out content (set by recalc).
+        this.contentHeight = 0;
+        // Per-paragraph left indent in pixels (keyed by paragraph index).
+        // Populated by the editor for list paragraphs so wrapping and the
+        // hanging indent are computed against the reduced content width.
+        this.paragraphIndents = new Map();
+    }
+
+    // Left indent (px) for a given paragraph index; 0 when not indented.
+    getParagraphIndent(paragraphIndex) {
+        return this.paragraphIndents.get(paragraphIndex) || 0;
     }
 
     printItems() {
@@ -162,7 +176,13 @@ export class Chain {
     }
 
     recalcXPositions() {
-        let posX = 0;
+        // Track the current paragraph so list paragraphs lay out (and wrap)
+        // against their indented left margin. The actual posX values are
+        // recomputed again by the editor's alignment pass; what matters here
+        // is that wrap points are chosen for the reduced available width.
+        let paragraphIdx = 0;
+        let indent = this.getParagraphIndent(paragraphIdx);
+        let posX = indent;
         for (let i = 0; i < this.items.length; i++) {
             if (this.items[i] instanceof TextLink) {
                 const width = this.items[i].measureText(this.ctx).width;
@@ -179,7 +199,7 @@ export class Chain {
                     if (!isFirstTextLinkOnLine) {
                         this.items.splice(i, 0, new VirtualNewlineLink());
                         i++;
-                        posX = 0;
+                        posX = indent;
                     }
                     let newItems = [];
                     let remaining = this.items[i].text;
@@ -223,7 +243,7 @@ export class Chain {
                     this.items.splice(i, 1, ...newItems);
                     i += newItems.length - 1;
                 } else if (posX + width > this.widthPixels) {
-                    posX = 0;
+                    posX = indent;
                     this.items[i].computed = {
                         ...this.items[i].computed,
                         posX
@@ -239,7 +259,10 @@ export class Chain {
                     posX += width;
                 }
             } else if (this.items[i] instanceof NewlineLink) {
-                posX = 0;
+                // A real newline starts the next paragraph at its own indent.
+                paragraphIdx++;
+                indent = this.getParagraphIndent(paragraphIdx);
+                posX = indent;
                 this.items[i].computed = {
                     ...this.items[i].computed,
                     posX
@@ -334,6 +357,10 @@ export class Chain {
                 };
             }
         }
+
+        // Total vertical extent of the content (bottom of the last line),
+        // used by the editor to bound scrolling.
+        this.contentHeight = posY;
     }
 
     recalc() {
@@ -406,6 +433,73 @@ export class Chain {
         this.recalc();
     }
 
+    // Delete the characters in the flattened range [startPos, endPos) and
+    // leave the cursor at startPos. Used by word/forward deletion.
+    deleteCharRange(startPos, endPos) {
+        if (startPos > endPos) {
+            [startPos, endPos] = [endPos, startPos];
+        }
+        const total = this.getTotalChars();
+        startPos = Math.max(0, startPos);
+        endPos = Math.min(total, endPos);
+        if (startPos === endPos) return;
+
+        // Remove the cursor; it is reinserted at startPos afterwards.
+        this.items.splice(this.cursorIdx(), 1);
+
+        let pos = 0;
+        const itemsToRemove = [];
+        for (let i = 0; i < this.items.length; i++) {
+            const item = this.items[i];
+            if (item instanceof TextLink) {
+                const itemStart = pos;
+                const itemEnd = pos + item.text.length;
+                if (itemEnd > startPos && itemStart < endPos) {
+                    const s = Math.max(0, startPos - itemStart);
+                    const e = Math.min(item.text.length, endPos - itemStart);
+                    item.text = item.text.substring(0, s) + item.text.substring(e);
+                    if (item.text.length === 0) {
+                        itemsToRemove.push(i);
+                    }
+                }
+                pos = itemEnd;
+            } else if (item instanceof NewlineLink) {
+                if (pos >= startPos && pos < endPos) {
+                    itemsToRemove.push(i);
+                }
+                pos += 1;
+            }
+        }
+
+        // Remove emptied/selected items in reverse order to keep indices valid.
+        for (let i = itemsToRemove.length - 1; i >= 0; i--) {
+            this.items.splice(itemsToRemove[i], 1);
+        }
+
+        // Reinsert the cursor at the start of the deleted range. Nothing before
+        // startPos was removed, so its position is unchanged.
+        this.items.unshift(new CursorLink());
+        this.moveCursorToCharPosition(startPos);
+    }
+
+    // Forward delete (the Delete key): remove the character after the cursor.
+    deleteForward() {
+        const pos = this.getCursorCharPosition();
+        this.deleteCharRange(pos, pos + 1);
+    }
+
+    // Ctrl+Backspace: delete from the previous word boundary to the cursor.
+    deleteWordLeft() {
+        const pos = this.getCursorCharPosition();
+        this.deleteCharRange(this.prevWordBoundary(pos), pos);
+    }
+
+    // Ctrl+Delete: delete from the cursor to the next word boundary.
+    deleteWordRight() {
+        const pos = this.getCursorCharPosition();
+        this.deleteCharRange(pos, this.nextWordBoundary(pos));
+    }
+
     // Move cursor to a specific character position
     moveCursorToCharPosition(charPos) {
         const { itemIdx, charOffset } = this.getItemFromCharPosition(charPos);
@@ -442,14 +536,21 @@ export class Chain {
     leftArrowPressed() {
         // Clear target X when moving horizontally
         this.targetCursorX = undefined;
-        
+
         // If there's a selection, move to the start of it
         if (this.hasSelection()) {
             this.moveCursorToCharPosition(this.selectionStart);
             this.clearSelection();
             return;
         }
-        
+        this.clearSelection();
+        this.moveCursorLeftOneChar();
+    }
+
+    // Core "move cursor one character to the left" logic, shared by
+    // leftArrowPressed and shiftLeftArrowPressed.
+    moveCursorLeftOneChar() {
+        this.targetCursorX = undefined;
         if (this.cursorIdx() > 0) {
             for (let i = this.cursorIdx() - 1; i >= 0; i--) {
                 if (this.items[i] instanceof TextLink) {
@@ -480,14 +581,21 @@ export class Chain {
     rightArrowPressed() {
         // Clear target X when moving horizontally
         this.targetCursorX = undefined;
-        
+
         // If there's a selection, move to the end of it
         if (this.hasSelection()) {
             this.moveCursorToCharPosition(this.selectionEnd);
             this.clearSelection();
             return;
         }
-        
+        this.clearSelection();
+        this.moveCursorRightOneChar();
+    }
+
+    // Core "move cursor one character to the right" logic, shared by
+    // rightArrowPressed and shiftRightArrowPressed.
+    moveCursorRightOneChar() {
+        this.targetCursorX = undefined;
         if (this.cursorIdx() < this.items.length - 1) {
             for (let i = this.cursorIdx() + 1; i < this.items.length; i++) {
                 if (this.items[i] instanceof TextLink) {
@@ -585,13 +693,247 @@ export class Chain {
             this.recalc();
             return;
         }
-        
+
         // Find the best position on the target line (closest X to currentX)
         this.clicked(currentX, targetY);
     }
 
+    // Character position of the cursor in the flattened text.
+    getCursorCharPosition() {
+        return this.getCharPosition(this.cursorIdx(), 0);
+    }
+
+    // Ensure a selection anchor exists, defaulting to the current cursor
+    // position. Called when a shift+arrow gesture begins.
+    beginSelectionIfNeeded() {
+        if (this.selectionAnchor === null) {
+            this.selectionAnchor = this.getCursorCharPosition();
+        }
+    }
+
+    // After the cursor has moved, recompute the selection range from the
+    // fixed anchor to the new cursor (focus) position.
+    updateSelectionFromAnchor() {
+        const focus = this.getCursorCharPosition();
+        if (focus === this.selectionAnchor) {
+            // Collapsed back onto the anchor: no visible selection, but keep
+            // the anchor so further shift+arrows continue from here.
+            this.selectionStart = null;
+            this.selectionEnd = null;
+        } else {
+            this.selectionStart = Math.min(this.selectionAnchor, focus);
+            this.selectionEnd = Math.max(this.selectionAnchor, focus);
+        }
+    }
+
+    shiftLeftArrowPressed() {
+        this.beginSelectionIfNeeded();
+        this.moveCursorLeftOneChar();
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftRightArrowPressed() {
+        this.beginSelectionIfNeeded();
+        this.moveCursorRightOneChar();
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftUpArrowPressed() {
+        this.beginSelectionIfNeeded();
+        this.upArrowPressed();
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftDownArrowPressed() {
+        this.beginSelectionIfNeeded();
+        this.downArrowPressed();
+        this.updateSelectionFromAnchor();
+    }
+
+    // ----- Home / End (visual line) -----
+
+    // Character positions of the start and end of the visual line the cursor
+    // is currently on. Visual lines are delimited by hard newlines and by the
+    // virtual newlines inserted by word wrapping.
+    getLineBounds() {
+        const cursorIdx = this.cursorIdx();
+
+        let startIdx = 0;
+        for (let i = cursorIdx - 1; i >= 0; i--) {
+            if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                startIdx = i + 1;
+                break;
+            }
+        }
+
+        let endIdx = this.items.length;
+        for (let i = cursorIdx + 1; i < this.items.length; i++) {
+            if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                endIdx = i;
+                break;
+            }
+        }
+
+        return {
+            startPos: this.getCharPosition(startIdx, 0),
+            endPos: this.getCharPosition(endIdx, 0)
+        };
+    }
+
+    homePressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getLineBounds().startPos);
+    }
+
+    endPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getLineBounds().endPos);
+    }
+
+    shiftHomePressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getLineBounds().startPos);
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftEndPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getLineBounds().endPos);
+        this.updateSelectionFromAnchor();
+    }
+
+    // ----- Document start / end (Ctrl+Home / Ctrl+End) -----
+
+    // Total number of characters in the flattened text.
+    getTotalChars() {
+        let total = 0;
+        for (const item of this.items) {
+            if (item instanceof TextLink) {
+                total += item.text.length;
+            } else if (item instanceof NewlineLink) {
+                total += 1;
+            }
+        }
+        return total;
+    }
+
+    documentStartPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(0);
+    }
+
+    documentEndPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.getTotalChars());
+    }
+
+    shiftDocumentStartPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(0);
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftDocumentEndPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.getTotalChars());
+        this.updateSelectionFromAnchor();
+    }
+
+    // ----- Word-wise navigation (Ctrl+Left / Ctrl+Right) -----
+
+    // Flattened text, aligned with getCharPosition's character counting
+    // (TextLink characters plus one '\n' per hard newline; virtual newlines
+    // and the cursor contribute nothing).
+    getFlatText() {
+        let text = '';
+        for (const item of this.items) {
+            if (item instanceof TextLink) {
+                text += item.text;
+            } else if (item instanceof NewlineLink) {
+                text += '\n';
+            }
+        }
+        return text;
+    }
+
+    // Word boundary to the left of pos: skip any whitespace, then skip the
+    // run of word characters, landing at the start of that word.
+    prevWordBoundary(pos) {
+        const text = this.getFlatText();
+        let i = pos;
+        while (i > 0 && /\s/.test(text[i - 1])) i--;
+        while (i > 0 && !/\s/.test(text[i - 1])) i--;
+        return i;
+    }
+
+    // Word boundary to the right of pos: skip any whitespace, then skip the
+    // run of word characters, landing just after that word.
+    nextWordBoundary(pos) {
+        const text = this.getFlatText();
+        const len = text.length;
+        let i = pos;
+        while (i < len && /\s/.test(text[i])) i++;
+        while (i < len && !/\s/.test(text[i])) i++;
+        return i;
+    }
+
+    wordLeftPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+    }
+
+    wordRightPressed() {
+        this.targetCursorX = undefined;
+        this.clearSelection();
+        this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+    }
+
+    shiftWordLeftPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+        this.updateSelectionFromAnchor();
+    }
+
+    shiftWordRightPressed() {
+        this.targetCursorX = undefined;
+        this.beginSelectionIfNeeded();
+        this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+        this.updateSelectionFromAnchor();
+    }
+
     enterPressed() {
         this.items.splice(this.cursorIdx(), 0, new NewlineLink());
+        this.recalc();
+    }
+
+    // Insert a horizontal rule on its own line, with the cursor left below it.
+    insertHorizontalRule() {
+        const idx = this.cursorIdx();
+
+        // Determine whether the cursor already sits at the start of a line.
+        // If not, break the current line first so the rule gets its own row.
+        let atLineStart = true;
+        for (let j = idx - 1; j >= 0; j--) {
+            if (this.items[j] instanceof CursorLink) continue;
+            // HorizontalRuleLink/NewlineLink both count as a preceding break.
+            atLineStart = this.items[j] instanceof NewlineLink;
+            break;
+        }
+
+        const toInsert = [];
+        if (!atLineStart) toInsert.push(new NewlineLink());
+        toInsert.push(new HorizontalRuleLink());
+        this.items.splice(idx, 0, ...toInsert);
         this.recalc();
     }
 
@@ -902,6 +1244,7 @@ export class Chain {
     clearSelection() {
         this.selectionStart = null;
         this.selectionEnd = null;
+        this.selectionAnchor = null;
     }
 
     hasSelection() {

@@ -113,6 +113,14 @@
     class NewlineLink extends ChainLink {}
 
     /**
+     * HorizontalRuleLink - A divider rendered as a horizontal line on its own row.
+     * It extends NewlineLink so that all line-breaking, character-counting,
+     * navigation, and selection logic treats it like a line break; only its
+     * rendering and serialization differ.
+     */
+    class HorizontalRuleLink extends NewlineLink {}
+
+    /**
      * Chain - Manages the linked list of text, cursor, and newline elements
      */
     class Chain {
@@ -125,6 +133,20 @@
             this.currentFontProperties = defaultFontProperties;
             this.selectionStart = null;
             this.selectionEnd = null;
+            // Fixed end of a keyboard (shift+arrow) selection. The cursor marks
+            // the moving "focus" end; this marks the stationary "anchor" end.
+            this.selectionAnchor = null;
+            // Total vertical extent of the laid-out content (set by recalc).
+            this.contentHeight = 0;
+            // Per-paragraph left indent in pixels (keyed by paragraph index).
+            // Populated by the editor for list paragraphs so wrapping and the
+            // hanging indent are computed against the reduced content width.
+            this.paragraphIndents = new Map();
+        }
+
+        // Left indent (px) for a given paragraph index; 0 when not indented.
+        getParagraphIndent(paragraphIndex) {
+            return this.paragraphIndents.get(paragraphIndex) || 0;
         }
 
         printItems() {
@@ -267,7 +289,13 @@
         }
 
         recalcXPositions() {
-            let posX = 0;
+            // Track the current paragraph so list paragraphs lay out (and wrap)
+            // against their indented left margin. The actual posX values are
+            // recomputed again by the editor's alignment pass; what matters here
+            // is that wrap points are chosen for the reduced available width.
+            let paragraphIdx = 0;
+            let indent = this.getParagraphIndent(paragraphIdx);
+            let posX = indent;
             for (let i = 0; i < this.items.length; i++) {
                 if (this.items[i] instanceof TextLink) {
                     const width = this.items[i].measureText(this.ctx).width;
@@ -284,7 +312,7 @@
                         if (!isFirstTextLinkOnLine) {
                             this.items.splice(i, 0, new VirtualNewlineLink());
                             i++;
-                            posX = 0;
+                            posX = indent;
                         }
                         let newItems = [];
                         let remaining = this.items[i].text;
@@ -328,7 +356,7 @@
                         this.items.splice(i, 1, ...newItems);
                         i += newItems.length - 1;
                     } else if (posX + width > this.widthPixels) {
-                        posX = 0;
+                        posX = indent;
                         this.items[i].computed = {
                             ...this.items[i].computed,
                             posX
@@ -344,7 +372,10 @@
                         posX += width;
                     }
                 } else if (this.items[i] instanceof NewlineLink) {
-                    posX = 0;
+                    // A real newline starts the next paragraph at its own indent.
+                    paragraphIdx++;
+                    indent = this.getParagraphIndent(paragraphIdx);
+                    posX = indent;
                     this.items[i].computed = {
                         ...this.items[i].computed,
                         posX
@@ -437,6 +468,10 @@
                     };
                 }
             }
+
+            // Total vertical extent of the content (bottom of the last line),
+            // used by the editor to bound scrolling.
+            this.contentHeight = posY;
         }
 
         recalc() {
@@ -509,6 +544,73 @@
             this.recalc();
         }
 
+        // Delete the characters in the flattened range [startPos, endPos) and
+        // leave the cursor at startPos. Used by word/forward deletion.
+        deleteCharRange(startPos, endPos) {
+            if (startPos > endPos) {
+                [startPos, endPos] = [endPos, startPos];
+            }
+            const total = this.getTotalChars();
+            startPos = Math.max(0, startPos);
+            endPos = Math.min(total, endPos);
+            if (startPos === endPos) return;
+
+            // Remove the cursor; it is reinserted at startPos afterwards.
+            this.items.splice(this.cursorIdx(), 1);
+
+            let pos = 0;
+            const itemsToRemove = [];
+            for (let i = 0; i < this.items.length; i++) {
+                const item = this.items[i];
+                if (item instanceof TextLink) {
+                    const itemStart = pos;
+                    const itemEnd = pos + item.text.length;
+                    if (itemEnd > startPos && itemStart < endPos) {
+                        const s = Math.max(0, startPos - itemStart);
+                        const e = Math.min(item.text.length, endPos - itemStart);
+                        item.text = item.text.substring(0, s) + item.text.substring(e);
+                        if (item.text.length === 0) {
+                            itemsToRemove.push(i);
+                        }
+                    }
+                    pos = itemEnd;
+                } else if (item instanceof NewlineLink) {
+                    if (pos >= startPos && pos < endPos) {
+                        itemsToRemove.push(i);
+                    }
+                    pos += 1;
+                }
+            }
+
+            // Remove emptied/selected items in reverse order to keep indices valid.
+            for (let i = itemsToRemove.length - 1; i >= 0; i--) {
+                this.items.splice(itemsToRemove[i], 1);
+            }
+
+            // Reinsert the cursor at the start of the deleted range. Nothing before
+            // startPos was removed, so its position is unchanged.
+            this.items.unshift(new CursorLink());
+            this.moveCursorToCharPosition(startPos);
+        }
+
+        // Forward delete (the Delete key): remove the character after the cursor.
+        deleteForward() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(pos, pos + 1);
+        }
+
+        // Ctrl+Backspace: delete from the previous word boundary to the cursor.
+        deleteWordLeft() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(this.prevWordBoundary(pos), pos);
+        }
+
+        // Ctrl+Delete: delete from the cursor to the next word boundary.
+        deleteWordRight() {
+            const pos = this.getCursorCharPosition();
+            this.deleteCharRange(pos, this.nextWordBoundary(pos));
+        }
+
         // Move cursor to a specific character position
         moveCursorToCharPosition(charPos) {
             const { itemIdx, charOffset } = this.getItemFromCharPosition(charPos);
@@ -545,14 +647,21 @@
         leftArrowPressed() {
             // Clear target X when moving horizontally
             this.targetCursorX = undefined;
-            
+
             // If there's a selection, move to the start of it
             if (this.hasSelection()) {
                 this.moveCursorToCharPosition(this.selectionStart);
                 this.clearSelection();
                 return;
             }
-            
+            this.clearSelection();
+            this.moveCursorLeftOneChar();
+        }
+
+        // Core "move cursor one character to the left" logic, shared by
+        // leftArrowPressed and shiftLeftArrowPressed.
+        moveCursorLeftOneChar() {
+            this.targetCursorX = undefined;
             if (this.cursorIdx() > 0) {
                 for (let i = this.cursorIdx() - 1; i >= 0; i--) {
                     if (this.items[i] instanceof TextLink) {
@@ -583,14 +692,21 @@
         rightArrowPressed() {
             // Clear target X when moving horizontally
             this.targetCursorX = undefined;
-            
+
             // If there's a selection, move to the end of it
             if (this.hasSelection()) {
                 this.moveCursorToCharPosition(this.selectionEnd);
                 this.clearSelection();
                 return;
             }
-            
+            this.clearSelection();
+            this.moveCursorRightOneChar();
+        }
+
+        // Core "move cursor one character to the right" logic, shared by
+        // rightArrowPressed and shiftRightArrowPressed.
+        moveCursorRightOneChar() {
+            this.targetCursorX = undefined;
             if (this.cursorIdx() < this.items.length - 1) {
                 for (let i = this.cursorIdx() + 1; i < this.items.length; i++) {
                     if (this.items[i] instanceof TextLink) {
@@ -688,13 +804,247 @@
                 this.recalc();
                 return;
             }
-            
+
             // Find the best position on the target line (closest X to currentX)
             this.clicked(currentX, targetY);
         }
 
+        // Character position of the cursor in the flattened text.
+        getCursorCharPosition() {
+            return this.getCharPosition(this.cursorIdx(), 0);
+        }
+
+        // Ensure a selection anchor exists, defaulting to the current cursor
+        // position. Called when a shift+arrow gesture begins.
+        beginSelectionIfNeeded() {
+            if (this.selectionAnchor === null) {
+                this.selectionAnchor = this.getCursorCharPosition();
+            }
+        }
+
+        // After the cursor has moved, recompute the selection range from the
+        // fixed anchor to the new cursor (focus) position.
+        updateSelectionFromAnchor() {
+            const focus = this.getCursorCharPosition();
+            if (focus === this.selectionAnchor) {
+                // Collapsed back onto the anchor: no visible selection, but keep
+                // the anchor so further shift+arrows continue from here.
+                this.selectionStart = null;
+                this.selectionEnd = null;
+            } else {
+                this.selectionStart = Math.min(this.selectionAnchor, focus);
+                this.selectionEnd = Math.max(this.selectionAnchor, focus);
+            }
+        }
+
+        shiftLeftArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.moveCursorLeftOneChar();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftRightArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.moveCursorRightOneChar();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftUpArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.upArrowPressed();
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftDownArrowPressed() {
+            this.beginSelectionIfNeeded();
+            this.downArrowPressed();
+            this.updateSelectionFromAnchor();
+        }
+
+        // ----- Home / End (visual line) -----
+
+        // Character positions of the start and end of the visual line the cursor
+        // is currently on. Visual lines are delimited by hard newlines and by the
+        // virtual newlines inserted by word wrapping.
+        getLineBounds() {
+            const cursorIdx = this.cursorIdx();
+
+            let startIdx = 0;
+            for (let i = cursorIdx - 1; i >= 0; i--) {
+                if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                    startIdx = i + 1;
+                    break;
+                }
+            }
+
+            let endIdx = this.items.length;
+            for (let i = cursorIdx + 1; i < this.items.length; i++) {
+                if (this.items[i] instanceof NewlineLink || this.items[i] instanceof VirtualNewlineLink) {
+                    endIdx = i;
+                    break;
+                }
+            }
+
+            return {
+                startPos: this.getCharPosition(startIdx, 0),
+                endPos: this.getCharPosition(endIdx, 0)
+            };
+        }
+
+        homePressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(this.getLineBounds().startPos);
+        }
+
+        endPressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(this.getLineBounds().endPos);
+        }
+
+        shiftHomePressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(this.getLineBounds().startPos);
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftEndPressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(this.getLineBounds().endPos);
+            this.updateSelectionFromAnchor();
+        }
+
+        // ----- Document start / end (Ctrl+Home / Ctrl+End) -----
+
+        // Total number of characters in the flattened text.
+        getTotalChars() {
+            let total = 0;
+            for (const item of this.items) {
+                if (item instanceof TextLink) {
+                    total += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    total += 1;
+                }
+            }
+            return total;
+        }
+
+        documentStartPressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(0);
+        }
+
+        documentEndPressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(this.getTotalChars());
+        }
+
+        shiftDocumentStartPressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(0);
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftDocumentEndPressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(this.getTotalChars());
+            this.updateSelectionFromAnchor();
+        }
+
+        // ----- Word-wise navigation (Ctrl+Left / Ctrl+Right) -----
+
+        // Flattened text, aligned with getCharPosition's character counting
+        // (TextLink characters plus one '\n' per hard newline; virtual newlines
+        // and the cursor contribute nothing).
+        getFlatText() {
+            let text = '';
+            for (const item of this.items) {
+                if (item instanceof TextLink) {
+                    text += item.text;
+                } else if (item instanceof NewlineLink) {
+                    text += '\n';
+                }
+            }
+            return text;
+        }
+
+        // Word boundary to the left of pos: skip any whitespace, then skip the
+        // run of word characters, landing at the start of that word.
+        prevWordBoundary(pos) {
+            const text = this.getFlatText();
+            let i = pos;
+            while (i > 0 && /\s/.test(text[i - 1])) i--;
+            while (i > 0 && !/\s/.test(text[i - 1])) i--;
+            return i;
+        }
+
+        // Word boundary to the right of pos: skip any whitespace, then skip the
+        // run of word characters, landing just after that word.
+        nextWordBoundary(pos) {
+            const text = this.getFlatText();
+            const len = text.length;
+            let i = pos;
+            while (i < len && /\s/.test(text[i])) i++;
+            while (i < len && !/\s/.test(text[i])) i++;
+            return i;
+        }
+
+        wordLeftPressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+        }
+
+        wordRightPressed() {
+            this.targetCursorX = undefined;
+            this.clearSelection();
+            this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+        }
+
+        shiftWordLeftPressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(this.prevWordBoundary(this.getCursorCharPosition()));
+            this.updateSelectionFromAnchor();
+        }
+
+        shiftWordRightPressed() {
+            this.targetCursorX = undefined;
+            this.beginSelectionIfNeeded();
+            this.moveCursorToCharPosition(this.nextWordBoundary(this.getCursorCharPosition()));
+            this.updateSelectionFromAnchor();
+        }
+
         enterPressed() {
             this.items.splice(this.cursorIdx(), 0, new NewlineLink());
+            this.recalc();
+        }
+
+        // Insert a horizontal rule on its own line, with the cursor left below it.
+        insertHorizontalRule() {
+            const idx = this.cursorIdx();
+
+            // Determine whether the cursor already sits at the start of a line.
+            // If not, break the current line first so the rule gets its own row.
+            let atLineStart = true;
+            for (let j = idx - 1; j >= 0; j--) {
+                if (this.items[j] instanceof CursorLink) continue;
+                // HorizontalRuleLink/NewlineLink both count as a preceding break.
+                atLineStart = this.items[j] instanceof NewlineLink;
+                break;
+            }
+
+            const toInsert = [];
+            if (!atLineStart) toInsert.push(new NewlineLink());
+            toInsert.push(new HorizontalRuleLink());
+            this.items.splice(idx, 0, ...toInsert);
             this.recalc();
         }
 
@@ -1005,6 +1355,7 @@
         clearSelection() {
             this.selectionStart = null;
             this.selectionEnd = null;
+            this.selectionAnchor = null;
         }
 
         hasSelection() {
@@ -1045,7 +1396,7 @@
     class FontProperties {
         constructor(size = 16, family = 'Arial', weight = 'normal', style = 'normal',
                     underline = false, strikethrough = false, superscript = false, subscript = false,
-                    color = '#000000') {
+                    color = '#000000', backgroundColor = null, link = null) {
             this.size = size;
             this.family = family;
             this.weight = weight;
@@ -1055,6 +1406,10 @@
             this.superscript = superscript;
             this.subscript = subscript;
             this.color = color;
+            // Highlight color drawn behind the glyphs. null means no highlight.
+            this.backgroundColor = backgroundColor;
+            // Hyperlink target (URL). null means the run is not a link.
+            this.link = link;
         }
 
         doPropertiesMatch(other) {
@@ -1066,17 +1421,56 @@
                    this.strikethrough === other.strikethrough &&
                    this.superscript === other.superscript &&
                    this.subscript === other.subscript &&
-                   this.color === other.color;
+                   this.color === other.color &&
+                   this.backgroundColor === other.backgroundColor &&
+                   this.link === other.link;
         }
 
         clone() {
             return new FontProperties(this.size, this.family, this.weight, this.style,
                                        this.underline, this.strikethrough, this.superscript, this.subscript,
-                                       this.color);
+                                       this.color, this.backgroundColor, this.link);
         }
 
         toFontString() {
             return `${this.style} ${this.weight} ${this.size}px ${this.family}`;
+        }
+
+        // Serialize to a plain object (for JSON document export).
+        toObject() {
+            return {
+                size: this.size,
+                family: this.family,
+                weight: this.weight,
+                style: this.style,
+                underline: this.underline,
+                strikethrough: this.strikethrough,
+                superscript: this.superscript,
+                subscript: this.subscript,
+                color: this.color,
+                backgroundColor: this.backgroundColor,
+                link: this.link
+            };
+        }
+
+        // Rebuild a FontProperties from a plain object produced by toObject().
+        // Missing fields fall back to constructor defaults so older documents
+        // (saved before a field existed) still load cleanly.
+        static fromObject(obj = {}) {
+            const d = new FontProperties();
+            return new FontProperties(
+                obj.size ?? d.size,
+                obj.family ?? d.family,
+                obj.weight ?? d.weight,
+                obj.style ?? d.style,
+                obj.underline ?? d.underline,
+                obj.strikethrough ?? d.strikethrough,
+                obj.superscript ?? d.superscript,
+                obj.subscript ?? d.subscript,
+                obj.color ?? d.color,
+                obj.backgroundColor ?? d.backgroundColor,
+                obj.link ?? d.link
+            );
         }
 
         // Toggle formatting
@@ -1128,6 +1522,11 @@
                 defaultFontFamily: options.defaultFontFamily || 'Arial',
                 defaultFontWeight: options.defaultFontWeight || 'normal',
                 defaultFontStyle: options.defaultFontStyle || 'normal',
+                scrollbarWidth: options.scrollbarWidth || 10,
+                scrollbarTrackColor: options.scrollbarTrackColor || 'rgba(0, 0, 0, 0.05)',
+                scrollbarThumbColor: options.scrollbarThumbColor || 'rgba(0, 0, 0, 0.3)',
+                minScrollbarThumbHeight: options.minScrollbarThumbHeight || 24,
+                tabSize: options.tabSize || 4,
                 debug: options.debug || false
             };
 
@@ -1151,6 +1550,21 @@
             this.blinkCycleStartTime = Date.now();
             this.animationFrameId = null;
 
+            // Vertical scroll state (content pixels scrolled off the top)
+            this.scrollY = 0;
+            // When set, the next render scrolls to keep the cursor visible. Set by
+            // keyboard actions; deliberately NOT set by wheel scrolling so the user
+            // can scroll away freely.
+            this.scrollToCursorOnNextRender = false;
+            // Scrollbar drag state
+            this.isScrollbarDragging = false;
+            this.scrollbarGrabOffset = 0;
+            // Touch state (tap-to-place-cursor vs drag-to-scroll)
+            this.touchStartX = 0;
+            this.touchStartY = 0;
+            this.touchLastY = 0;
+            this.touchMoved = false;
+
             // Selection state
             this.isMouseDown = false;
             this.mouseDownPos = null;
@@ -1173,6 +1587,13 @@
 
             // Paragraph alignment (keyed by paragraph index)
             this.paragraphAlignments = new Map();
+
+            // Paragraph list type, 'bullet' | 'number' (keyed by paragraph index)
+            this.paragraphLists = new Map();
+            // Left indent applied to list paragraphs, in pixels.
+            this.LIST_INDENT = 32;
+            // Counter for stable paragraph-boundary ids (see boundaryKey).
+            this._pidCounter = 0;
 
             // Find/Replace state
             this.findMatches = [];
@@ -1198,6 +1619,10 @@
             this.boundHandleMouseMove = (e) => this.handleMouseMove(e);
             this.boundHandleMouseUp = (e) => this.handleMouseUp(e);
             this.boundHandleMouseOver = (e) => this.handleMouseOver(e);
+            this.boundHandleWheel = (e) => this.handleWheel(e);
+            this.boundHandleTouchStart = (e) => this.handleTouchStart(e);
+            this.boundHandleTouchMove = (e) => this.handleTouchMove(e);
+            this.boundHandleTouchEnd = (e) => this.handleTouchEnd(e);
 
             // Skip event listeners if canvas doesn't support them (e.g., node-canvas in tests)
             if (typeof this.canvas.addEventListener === 'function') {
@@ -1209,6 +1634,12 @@
                 this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
                 this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
                 this.canvas.addEventListener('mouseover', this.boundHandleMouseOver);
+                this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
+
+                // Touch events (passive: false so we can preventDefault to scroll)
+                this.canvas.addEventListener('touchstart', this.boundHandleTouchStart, { passive: false });
+                this.canvas.addEventListener('touchmove', this.boundHandleTouchMove, { passive: false });
+                this.canvas.addEventListener('touchend', this.boundHandleTouchEnd, { passive: false });
 
                 // Make canvas focusable and set initial cursor
                 this.canvas.tabIndex = 1;
@@ -1225,7 +1656,7 @@
 
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
-            const y = e.clientY - rect.top - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
             const pos = this.getCharacterAtPosition(x, y);
             if (this.isPositionInSelection(pos)) {
@@ -1238,6 +1669,9 @@
         handleKeyDown(e) {
             const key = e.key;
             const ctrl = e.ctrlKey || e.metaKey;
+
+            // Any keyboard action should bring the cursor back into view on render.
+            this.scrollToCursorOnNextRender = true;
 
             // Undo/Redo shortcuts
             if (ctrl && key === 'z' && !e.shiftKey) {
@@ -1313,8 +1747,21 @@
                 this.takeSnapshot();
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
+                } else if (ctrl) {
+                    this.remapAroundEdit(() => this.chain.deleteWordLeft());
                 } else {
-                    this.chain.backspacePressed();
+                    this.remapAroundEdit(() => this.chain.backspacePressed());
+                }
+                this.render();
+            } else if (key === 'Delete') {
+                e.preventDefault();
+                this.takeSnapshot();
+                if (this.chain.hasSelection()) {
+                    this.deleteSelection();
+                } else if (ctrl) {
+                    this.remapAroundEdit(() => this.chain.deleteWordRight());
+                } else {
+                    this.remapAroundEdit(() => this.chain.deleteForward());
                 }
                 this.render();
             } else if (key === 'Enter') {
@@ -1323,28 +1770,107 @@
                 if (this.chain.hasSelection()) {
                     this.deleteSelection();
                 }
-                this.chain.enterPressed();
+                // Split the current paragraph and carry its list/alignment onto the
+                // new line (auto-continue), shifting following paragraphs.
+                const splitPara = this.getCurrentParagraphIndex();
+                this.remapAroundEdit(() => this.chain.enterPressed());
+                this.continueParagraphAttributes(splitPara);
                 this.render();
             } else if (key === 'ArrowLeft') {
                 e.preventDefault();
-                // leftArrowPressed handles selection internally
-                this.chain.leftArrowPressed();
+                // Ctrl moves by whole words; Shift extends the selection.
+                // Plain cursor movement collapses any existing selection internally.
+                if (ctrl && e.shiftKey) {
+                    this.chain.shiftWordLeftPressed();
+                } else if (ctrl) {
+                    this.chain.wordLeftPressed();
+                } else if (e.shiftKey) {
+                    this.chain.shiftLeftArrowPressed();
+                } else {
+                    this.chain.leftArrowPressed();
+                }
                 this.render();
             } else if (key === 'ArrowRight') {
                 e.preventDefault();
-                // rightArrowPressed handles selection internally
-                this.chain.rightArrowPressed();
+                if (ctrl && e.shiftKey) {
+                    this.chain.shiftWordRightPressed();
+                } else if (ctrl) {
+                    this.chain.wordRightPressed();
+                } else if (e.shiftKey) {
+                    this.chain.shiftRightArrowPressed();
+                } else {
+                    this.chain.rightArrowPressed();
+                }
+                this.render();
+            } else if (key === 'Home') {
+                e.preventDefault();
+                // Ctrl jumps to document start; Shift extends the selection.
+                if (ctrl && e.shiftKey) {
+                    this.chain.shiftDocumentStartPressed();
+                } else if (ctrl) {
+                    this.chain.documentStartPressed();
+                } else if (e.shiftKey) {
+                    this.chain.shiftHomePressed();
+                } else {
+                    this.chain.homePressed();
+                }
+                this.render();
+            } else if (key === 'End') {
+                e.preventDefault();
+                if (ctrl && e.shiftKey) {
+                    this.chain.shiftDocumentEndPressed();
+                } else if (ctrl) {
+                    this.chain.documentEndPressed();
+                } else if (e.shiftKey) {
+                    this.chain.shiftEndPressed();
+                } else {
+                    this.chain.endPressed();
+                }
                 this.render();
             } else if (key === 'ArrowUp') {
                 e.preventDefault();
-                this.chain.clearSelection();
-                this.chain.upArrowPressed();
+                if (e.shiftKey) {
+                    this.chain.shiftUpArrowPressed();
+                } else {
+                    this.chain.clearSelection();
+                    this.chain.upArrowPressed();
+                }
                 this.render();
             } else if (key === 'ArrowDown') {
                 e.preventDefault();
-                this.chain.clearSelection();
-                this.chain.downArrowPressed();
+                if (e.shiftKey) {
+                    this.chain.shiftDownArrowPressed();
+                } else {
+                    this.chain.clearSelection();
+                    this.chain.downArrowPressed();
+                }
                 this.render();
+            } else if (key === 'PageUp') {
+                e.preventDefault();
+                this.pageMove(-1, e.shiftKey);
+                this.render();
+            } else if (key === 'PageDown') {
+                e.preventDefault();
+                this.pageMove(1, e.shiftKey);
+                this.render();
+            } else if (key === 'Tab') {
+                // Insert spaces instead of moving focus off the canvas.
+                e.preventDefault();
+                this.takeSnapshot();
+                if (this.chain.hasSelection()) {
+                    this.deleteSelection();
+                }
+                for (let i = 0; i < this.options.tabSize; i++) {
+                    this.chain.printableKeyPressed(' ');
+                }
+                this.render();
+            } else if (key === 'Escape') {
+                // Clear any active selection.
+                e.preventDefault();
+                if (this.chain.hasSelection()) {
+                    this.chain.clearSelection();
+                    this.render();
+                }
             } else if (key.length === 1 && !ctrl) {
                 // Printable character - prevent default to stop page scrolling
                 e.preventDefault();
@@ -1413,14 +1939,17 @@
                         this.deleteSelection();
                     }
 
-                    // Insert pasted text
-                    for (let char of text) {
-                        if (char === '\n') {
-                            this.chain.enterPressed();
-                        } else {
-                            this.chain.printableKeyPressed(char);
+                    // Insert pasted text, keeping existing paragraphs' attributes
+                    // attached as newlines shift their indices.
+                    this.remapAroundEdit(() => {
+                        for (let char of text) {
+                            if (char === '\n') {
+                                this.chain.enterPressed();
+                            } else {
+                                this.chain.printableKeyPressed(char);
+                            }
                         }
-                    }
+                    });
 
                     this.render();
                 }).catch(err => {
@@ -1457,10 +1986,15 @@
 
         deleteSelection() {
             if (!this.chain.hasSelection()) return;
+            // Deleting a selection can remove newlines (merging paragraphs); keep
+            // paragraph attributes attached to their boundaries across the edit.
+            this.remapAroundEdit(() => this._deleteSelectionRaw());
+        }
 
+        _deleteSelectionRaw() {
             const selStart = this.chain.selectionStart;
             const selEnd = this.chain.selectionEnd;
-            
+
             // Remove all items in selection range
             const items = this.chain.getItems();
             let pos = 0;
@@ -1511,8 +2045,19 @@
 
         handleMouseDown(e) {
             const rect = this.canvas.getBoundingClientRect();
+            let openLinkPopupAfterRender = false;
+
+            // Scrollbar interaction takes precedence over text positioning.
+            if (this.startScrollbarDragIfHit(e.clientX - rect.left, e.clientY - rect.top)) {
+                return;
+            }
+
+            // Any click on the canvas dismisses an open link editor; it reopens
+            // below if the click lands inside a link.
+            this.closeLinkPopup();
+
             const x = e.clientX - rect.left - this.options.padding;
-            const y = e.clientY - rect.top - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
             // Track click count for double/triple click
             const now = Date.now();
@@ -1562,6 +2107,17 @@
                 this.chain.clearSelection();
                 this.chain.clicked(x, y);
                 console.log('Single click - cursor repositioned');
+
+                // If the click landed inside a link, either follow it
+                // (Ctrl/Cmd-click) or surface the link editor.
+                const href = this.getLinkAtCursor();
+                if (href) {
+                    if (e.metaKey || e.ctrlKey) {
+                        this.openLink(href);
+                    } else {
+                        openLinkPopupAfterRender = true;
+                    }
+                }
             }
 
             this.render();
@@ -1571,14 +2127,31 @@
 
             // Focus the canvas
             this.canvas.focus();
+
+            // Open the link editor after the canvas regains focus so the popup's
+            // URL field keeps focus.
+            if (openLinkPopupAfterRender) {
+                this.openLinkPopup();
+            }
         }
 
         handleMouseMove(e) {
+            // Dragging the scrollbar thumb.
+            if (this.isScrollbarDragging) {
+                const rect = this.canvas.getBoundingClientRect();
+                const m = this.getScrollbarMetrics();
+                if (m) {
+                    this.updateScrollFromThumb(e.clientY - rect.top, m);
+                    this.render();
+                }
+                return;
+            }
+
             if (!this.isMouseDown) return;
 
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
-            const y = e.clientY - rect.top - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
             // Calculate drag distance
             const dragDistance = Math.sqrt(Math.pow(x - this.mouseDownX, 2) + Math.pow(y - this.mouseDownY, 2));
@@ -1618,9 +2191,15 @@
         }
 
         handleMouseUp(e) {
+            // End a scrollbar drag.
+            if (this.isScrollbarDragging) {
+                this.isScrollbarDragging = false;
+                return;
+            }
+
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left - this.options.padding;
-            const y = e.clientY - rect.top - this.options.padding;
+            const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
             // Handle drag and drop completion
             if (this.isDragging && this.draggedText) {
@@ -1886,17 +2465,233 @@
             this.blinkCycleStartTime = Date.now();
         }
 
+        // Height of the visible content area (canvas minus top/bottom padding).
+        getViewportHeight() {
+            return Math.max(0, this.canvas.height - this.options.padding * 2);
+        }
+
+        // Maximum vertical scroll offset given the current content.
+        getMaxScroll() {
+            return Math.max(0, this.chain.contentHeight - this.getViewportHeight());
+        }
+
+        // Keep scrollY within [0, maxScroll].
+        clampScroll() {
+            const max = this.getMaxScroll();
+            if (this.scrollY > max) this.scrollY = max;
+            if (this.scrollY < 0) this.scrollY = 0;
+        }
+
+        // Adjust scrollY so the cursor's vertical extent is within the viewport.
+        scrollCursorIntoView() {
+            const cursor = this.chain.getItems().find(item => item instanceof CursorLink);
+            if (!cursor || !cursor.computed) return;
+
+            const viewport = this.getViewportHeight();
+            const height = cursor.computed.height || this.options.defaultFontSize;
+            const top = cursor.computed.posY - height;
+            const bottom = cursor.computed.posY;
+
+            if (bottom > this.scrollY + viewport) {
+                this.scrollY = bottom - viewport;
+            }
+            if (top < this.scrollY) {
+                this.scrollY = top;
+            }
+            this.clampScroll();
+        }
+
+        handleWheel(e) {
+            if (this.getMaxScroll() <= 0) return; // nothing to scroll
+            if (e.preventDefault) e.preventDefault();
+            this.scrollY += e.deltaY;
+            this.clampScroll();
+            this.render();
+        }
+
+        // Geometry of the scrollbar in canvas (screen) coordinates, or null when
+        // the content fits and no scrollbar is shown. Thumb size/position are
+        // independent of scrollY except for thumbY.
+        getScrollbarMetrics() {
+            const maxScroll = this.getMaxScroll();
+            if (maxScroll <= 0) return null;
+
+            const width = this.options.scrollbarWidth;
+            const trackX = this.canvas.width - width;
+            const trackHeight = this.canvas.height;
+            const viewport = this.getViewportHeight();
+
+            const visibleRatio = Math.min(1, viewport / this.chain.contentHeight);
+            const thumbHeight = Math.max(
+                this.options.minScrollbarThumbHeight,
+                Math.min(trackHeight, trackHeight * visibleRatio)
+            );
+            const thumbY = (this.scrollY / maxScroll) * (trackHeight - thumbHeight);
+
+            return { width, trackX, trackHeight, thumbHeight, thumbY };
+        }
+
+        // Set scrollY so the thumb's top lands at (rawY - grabOffset).
+        updateScrollFromThumb(rawY, metrics) {
+            const travel = metrics.trackHeight - metrics.thumbHeight;
+            const newThumbY = rawY - this.scrollbarGrabOffset;
+            const ratio = travel > 0 ? newThumbY / travel : 0;
+            this.scrollY = ratio * this.getMaxScroll();
+            this.clampScroll();
+        }
+
+        // If (rawX, rawY) is on the scrollbar, begin a drag and return true.
+        // A click on the track (off the thumb) jumps the thumb under the cursor.
+        startScrollbarDragIfHit(rawX, rawY) {
+            const m = this.getScrollbarMetrics();
+            if (!m || rawX < m.trackX) return false;
+
+            this.isScrollbarDragging = true;
+            if (rawY >= m.thumbY && rawY <= m.thumbY + m.thumbHeight) {
+                this.scrollbarGrabOffset = rawY - m.thumbY;
+            } else {
+                this.scrollbarGrabOffset = m.thumbHeight / 2;
+                this.updateScrollFromThumb(rawY, m);
+            }
+            this.render();
+            return true;
+        }
+
+        renderScrollbar() {
+            const m = this.getScrollbarMetrics();
+            if (!m) return;
+
+            this.ctx.fillStyle = this.options.scrollbarTrackColor;
+            this.ctx.fillRect(m.trackX, 0, m.width, m.trackHeight);
+
+            const inset = 2;
+            this.ctx.fillStyle = this.options.scrollbarThumbColor;
+            this.ctx.fillRect(
+                m.trackX + inset,
+                m.thumbY + inset,
+                m.width - inset * 2,
+                m.thumbHeight - inset * 2
+            );
+        }
+
+        // Move the cursor by roughly one viewport of lines. direction is -1 (up)
+        // or +1 (down). Extends the selection when extendSelection is true. Also
+        // shifts the viewport by a page so the gesture scrolls even when the cursor
+        // started near the target edge.
+        pageMove(direction, extendSelection) {
+            const viewport = this.getViewportHeight();
+            const cursor = this.chain.getItems().find(item => item instanceof CursorLink);
+            const lineHeight = (cursor && cursor.computed && cursor.computed.lineHeight)
+                || this.options.defaultFontSize * 1.5;
+            const lines = Math.max(1, Math.floor(viewport / lineHeight));
+
+            if (!extendSelection) {
+                this.chain.clearSelection();
+            }
+
+            for (let i = 0; i < lines; i++) {
+                if (direction < 0) {
+                    if (extendSelection) this.chain.shiftUpArrowPressed();
+                    else this.chain.upArrowPressed();
+                } else {
+                    if (extendSelection) this.chain.shiftDownArrowPressed();
+                    else this.chain.downArrowPressed();
+                }
+            }
+
+            this.scrollY += direction * viewport;
+            this.clampScroll();
+        }
+
+        // ----- Touch support -----
+
+        handleTouchStart(e) {
+            if (!e.touches || e.touches.length !== 1) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const rawX = e.touches[0].clientX - rect.left;
+            const rawY = e.touches[0].clientY - rect.top;
+
+            this.touchStartX = rawX;
+            this.touchStartY = rawY;
+            this.touchLastY = rawY;
+            this.touchMoved = false;
+
+            // A touch on the scrollbar drives it directly.
+            if (this.startScrollbarDragIfHit(rawX, rawY)) {
+                if (e.preventDefault) e.preventDefault();
+            }
+        }
+
+        handleTouchMove(e) {
+            if (!e.touches || e.touches.length !== 1) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const rawX = e.touches[0].clientX - rect.left;
+            const rawY = e.touches[0].clientY - rect.top;
+
+            if (this.isScrollbarDragging) {
+                const m = this.getScrollbarMetrics();
+                if (m) {
+                    this.updateScrollFromThumb(rawY, m);
+                    this.render();
+                }
+                if (e.preventDefault) e.preventDefault();
+                return;
+            }
+
+            const TAP_THRESHOLD = 10;
+            if (Math.abs(rawY - this.touchStartY) > TAP_THRESHOLD ||
+                Math.abs(rawX - this.touchStartX) > TAP_THRESHOLD) {
+                this.touchMoved = true;
+            }
+
+            // Drag to pan the content (content follows the finger).
+            if (this.getMaxScroll() > 0) {
+                this.scrollY += this.touchLastY - rawY;
+                this.clampScroll();
+                this.render();
+                if (e.preventDefault) e.preventDefault();
+            }
+            this.touchLastY = rawY;
+        }
+
+        handleTouchEnd(e) {
+            if (this.isScrollbarDragging) {
+                this.isScrollbarDragging = false;
+                return;
+            }
+
+            // A tap (negligible movement) positions the cursor.
+            if (!this.touchMoved) {
+                const x = this.touchStartX - this.options.padding;
+                const y = this.touchStartY - this.options.padding + this.scrollY;
+                this.chain.clearSelection();
+                this.chain.clicked(x, y);
+                this.scrollToCursorOnNextRender = true;
+                this.render();
+                if (typeof this.canvas.focus === 'function') this.canvas.focus();
+                if (e.preventDefault) e.preventDefault();
+            }
+        }
+
         render() {
             // Apply alignment adjustments before rendering
             this.adjustForAlignment();
+
+            // Auto-scroll to the cursor after keyboard-driven changes (but not
+            // after wheel scrolling, which leaves the flag unset).
+            if (this.scrollToCursorOnNextRender) {
+                this.scrollCursorIntoView();
+                this.scrollToCursorOnNextRender = false;
+            }
+            this.clampScroll();
 
             // Clear canvas
             this.ctx.fillStyle = this.options.backgroundColor;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-            // Translate for padding
+            // Translate for padding and current scroll offset
             this.ctx.save();
-            this.ctx.translate(this.options.padding, this.options.padding);
+            this.ctx.translate(this.options.padding, this.options.padding - this.scrollY);
 
             // Render find matches first
             if (this.findMatches.length > 0) {
@@ -1915,12 +2710,84 @@
                 
                 if (item instanceof TextLink) {
                     this.renderTextLink(item);
+                } else if (item instanceof HorizontalRuleLink) {
+                    this.renderHorizontalRule(item);
                 } else if (item instanceof CursorLink) {
                     this.renderCursor(item);
                 }
             }
 
+            // Draw bullet/number markers in the left gutter of list paragraphs.
+            this.renderListMarkers();
+
             this.ctx.restore();
+
+            // Scrollbar is drawn in screen space, on top of the content.
+            this.renderScrollbar();
+        }
+
+        renderHorizontalRule(rule) {
+            // rule.computed.posY is the bottom of the (empty) line the rule owns;
+            // draw the line through the vertical middle of that line's text slot.
+            const posY = (rule.computed && rule.computed.posY) || 0;
+            const midOffset = this.defaultFontProperties.size * 0.75;
+            const y = posY - midOffset;
+
+            this.ctx.strokeStyle = this.options.horizontalRuleColor || 'rgba(0, 0, 0, 0.35)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.editorWidth, y);
+            this.ctx.stroke();
+        }
+
+        renderListMarkers() {
+            if (this.paragraphLists.size === 0) return;
+            const items = this.chain.getItems();
+
+            // Total paragraph count (newlines + 1) so numbering can be computed
+            // for every paragraph, then look up each list paragraph's marker text.
+            let totalParagraphs = 1;
+            for (const item of items) {
+                if (item instanceof NewlineLink) totalParagraphs++;
+            }
+
+            // Sequential numbering: consecutive 'number' paragraphs count up; any
+            // non-numbered paragraph (bullet or plain) restarts the sequence.
+            const markerText = new Map();
+            let counter = 0;
+            for (let p = 0; p < totalParagraphs; p++) {
+                const type = this.paragraphLists.get(p);
+                if (type === 'number') {
+                    counter++;
+                    markerText.set(p, `${counter}.`);
+                } else {
+                    counter = 0;
+                    if (type === 'bullet') markerText.set(p, '•');
+                }
+            }
+
+            const gap = 8;
+            this.ctx.font = `${this.defaultFontProperties.size}px ${this.defaultFontProperties.family}`;
+            this.ctx.fillStyle = this.defaultFontProperties.color || '#000000';
+
+            // Draw each list paragraph's marker once, aligned to the baseline of
+            // its first visual line (the first item in the paragraph carrying a Y).
+            const drawn = new Set();
+            let paragraphIdx = 0;
+            for (const item of items) {
+                if (!drawn.has(paragraphIdx) && markerText.has(paragraphIdx) &&
+                    !(item instanceof VirtualNewlineLink) &&
+                    item.computed && typeof item.computed.posY === 'number') {
+                    const marker = markerText.get(paragraphIdx);
+                    const width = this.ctx.measureText(marker).width;
+                    this.ctx.fillText(marker, this.LIST_INDENT - gap - width, item.computed.posY);
+                    drawn.add(paragraphIdx);
+                }
+                if (item instanceof NewlineLink) {
+                    paragraphIdx++;
+                }
+            }
         }
 
         renderSelection() {
@@ -2022,16 +2889,33 @@
                 : fontProps.toFontString();
 
             this.ctx.font = fontString;
-            this.ctx.fillStyle = fontProps.color || '#000000';
-            this.ctx.fillText(textLink.text, posX, posY);
 
-            // Measure text for decoration lines
+            // Measure text once (used for the highlight box and decoration lines).
             const metrics = this.ctx.measureText(textLink.text);
             const textWidth = metrics.width;
 
-            // Draw underline
-            if (fontProps.underline) {
-                this.ctx.strokeStyle = fontProps.color || '#000000';
+            // Draw highlight background behind the glyphs, spanning the line's
+            // ascent/descent so it reads like a marker stroke.
+            if (fontProps.backgroundColor) {
+                const ascent = textLink.getAscent() || fontSize * 0.8;
+                const descent = textLink.getDescent() || fontSize * 0.2;
+                this.ctx.fillStyle = fontProps.backgroundColor;
+                this.ctx.fillRect(posX, posY - ascent, textWidth, ascent + descent);
+            }
+
+            // Link runs render in the link color and are always underlined,
+            // overriding the run's own text color.
+            const isLink = !!fontProps.link;
+            const drawColor = isLink
+                ? (this.options.linkColor || '#1a0dab')
+                : (fontProps.color || '#000000');
+
+            this.ctx.fillStyle = drawColor;
+            this.ctx.fillText(textLink.text, posX, posY);
+
+            // Draw underline (explicit underline, or implied by a link)
+            if (fontProps.underline || isLink) {
+                this.ctx.strokeStyle = drawColor;
                 this.ctx.lineWidth = Math.max(1, fontSize * 0.05);
                 this.ctx.beginPath();
                 const underlineY = posY + fontSize * 0.1;
@@ -2281,6 +3165,18 @@
             }
         }
 
+        // Set the highlight (background) color. Pass null to clear the highlight.
+        setHighlightColor(color) {
+            if (this.chain.hasSelection()) {
+                this.takeSnapshot();
+                this.applyFormattingToSelection('backgroundColor', () => color);
+                this.render();
+            } else {
+                // Set for next typed text
+                this.chain.currentFontProperties.backgroundColor = color;
+            }
+        }
+
         // Text alignment methods
         getCurrentParagraphIndex() {
             const items = this.chain.getItems();
@@ -2312,6 +3208,448 @@
             this.render();
         }
 
+        // The paragraph index containing a given flattened character position
+        // (the number of real newlines strictly before that position).
+        paragraphIndexAtCharPos(target) {
+            const items = this.chain.getItems();
+            let para = 0;
+            let pos = 0;
+            for (const item of items) {
+                if (item instanceof TextLink) {
+                    pos += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    if (pos < target) para++;
+                    pos += 1;
+                }
+            }
+            return para;
+        }
+
+        // Inclusive [start, end] paragraph range covered by the selection, or the
+        // single paragraph at the cursor when there is no selection.
+        getParagraphRange() {
+            if (this.chain.hasSelection()) {
+                const selStart = this.chain.selectionStart;
+                const selEnd = this.chain.selectionEnd;
+                const startPara = this.paragraphIndexAtCharPos(selStart);
+                // Use selEnd - 1 so a selection ending exactly at a paragraph
+                // boundary does not pull in the following paragraph.
+                const endPara = this.paragraphIndexAtCharPos(Math.max(selStart, selEnd - 1));
+                return [startPara, endPara];
+            }
+            const p = this.getCurrentParagraphIndex();
+            return [p, p];
+        }
+
+        // List paragraphs reduce the chain's wrap width and gain a hanging indent.
+        syncParagraphIndents() {
+            const indents = new Map();
+            for (const [paragraphIndex] of this.paragraphLists) {
+                indents.set(paragraphIndex, this.LIST_INDENT);
+            }
+            this.chain.paragraphIndents = indents;
+        }
+
+        // --- Stable paragraph attributes across structural edits ---------------
+        //
+        // Paragraph alignment and list type are stored by paragraph index, but
+        // paragraph indices shift when newlines are inserted or removed. To keep
+        // attributes attached to the right paragraph, each paragraph is identified
+        // by the *boundary* that starts it: the 'START' sentinel for paragraph 0,
+        // or the NewlineLink object preceding it otherwise. Those boundary objects
+        // survive edits, so capturing attributes by boundary identity and rebuilding
+        // the index maps afterwards is self-correcting for any edit.
+
+        // Stable id for a paragraph boundary (sentinel or a NewlineLink object).
+        boundaryKey(boundary) {
+            if (boundary === 'START') return 'START';
+            if (boundary._pid === undefined) {
+                boundary._pid = ++this._pidCounter;
+            }
+            return boundary._pid;
+        }
+
+        // Boundary that starts each paragraph, indexed by paragraph number.
+        paragraphBoundaries() {
+            const boundaries = ['START'];
+            for (const item of this.chain.getItems()) {
+                if (item instanceof NewlineLink) boundaries.push(item);
+            }
+            return boundaries;
+        }
+
+        // Snapshot the current attributes keyed by boundary identity.
+        captureParagraphAttributes() {
+            const boundaries = this.paragraphBoundaries();
+            const align = new Map();
+            const list = new Map();
+            for (const [idx, v] of this.paragraphAlignments) {
+                if (idx < boundaries.length) align.set(this.boundaryKey(boundaries[idx]), v);
+            }
+            for (const [idx, v] of this.paragraphLists) {
+                if (idx < boundaries.length) list.set(this.boundaryKey(boundaries[idx]), v);
+            }
+            return { align, list };
+        }
+
+        // Rebuild the index maps from a boundary-keyed snapshot after an edit.
+        restoreParagraphAttributes(saved) {
+            const boundaries = this.paragraphBoundaries();
+            const align = new Map();
+            const list = new Map();
+            for (let i = 0; i < boundaries.length; i++) {
+                const key = this.boundaryKey(boundaries[i]);
+                if (saved.align.has(key)) align.set(i, saved.align.get(key));
+                if (saved.list.has(key)) list.set(i, saved.list.get(key));
+            }
+            this.paragraphAlignments = align;
+            this.paragraphLists = list;
+            this.syncParagraphIndents();
+        }
+
+        // Run a structural edit while preserving paragraph attributes by identity.
+        remapAroundEdit(editFn) {
+            const saved = this.captureParagraphAttributes();
+            editFn();
+            this.restoreParagraphAttributes(saved);
+        }
+
+        // After splitting paragraph P (Enter), carry its attributes to the new
+        // paragraph P+1 so lists and alignment continue onto the next line.
+        continueParagraphAttributes(p) {
+            const align = this.paragraphAlignments.get(p);
+            if (align !== undefined) this.paragraphAlignments.set(p + 1, align);
+            const list = this.paragraphLists.get(p);
+            if (list !== undefined) this.paragraphLists.set(p + 1, list);
+            this.syncParagraphIndents();
+        }
+
+        // Apply (or toggle off) a list type across the current paragraph range.
+        setList(type) {
+            this.takeSnapshot();
+            const [startPara, endPara] = this.getParagraphRange();
+
+            // If every paragraph in the range is already this type, toggle it off.
+            let allSame = true;
+            for (let p = startPara; p <= endPara; p++) {
+                if (this.paragraphLists.get(p) !== type) {
+                    allSame = false;
+                    break;
+                }
+            }
+
+            for (let p = startPara; p <= endPara; p++) {
+                if (allSame) {
+                    this.paragraphLists.delete(p);
+                } else {
+                    this.paragraphLists.set(p, type);
+                }
+            }
+
+            this.syncParagraphIndents();
+            this.chain.recalc();
+            this.render();
+        }
+
+        toggleBulletList() {
+            this.setList('bullet');
+        }
+
+        toggleNumberedList() {
+            this.setList('number');
+        }
+
+        // Insert a horizontal rule (divider) on its own line at the cursor.
+        insertHorizontalRule() {
+            this.takeSnapshot();
+            this.chain.insertHorizontalRule();
+            this.scrollToCursorOnNextRender = true;
+            this.render();
+        }
+
+        // --- Hyperlinks -------------------------------------------------------
+
+        // The actual FontProperties active at the cursor (cloneable), as opposed
+        // to getFontAtCursor() which returns a plain display subset.
+        getFontPropertiesAtCursor() {
+            const items = this.chain.getItems();
+            const cursorIdx = this.chain.cursorIdx();
+            for (let i = cursorIdx - 1; i >= 0; i--) {
+                if (items[i] instanceof TextLink) {
+                    return items[i].intrinsic.fontProperties.clone();
+                }
+            }
+            return this.chain.currentFontProperties.clone();
+        }
+
+        // Extract the plain text within a flattened [start, end) range.
+        getTextInRange(start, end) {
+            const items = this.chain.getItems();
+            let pos = 0;
+            let out = '';
+            for (const item of items) {
+                if (item instanceof TextLink) {
+                    const s = Math.max(0, start - pos);
+                    const e = Math.min(item.text.length, end - pos);
+                    if (e > s) out += item.text.substring(s, e);
+                    pos += item.text.length;
+                } else if (item instanceof NewlineLink) {
+                    if (pos >= start && pos < end) out += '\n';
+                    pos += 1;
+                }
+            }
+            return out;
+        }
+
+        // The contiguous link run at the cursor, or null. Expands across adjacent
+        // runs (e.g. chunked words) that share the exact same href.
+        getLinkRangeAtCursor() {
+            const items = this.chain.getItems();
+            const links = [];
+            for (const item of items) {
+                if (item instanceof TextLink) {
+                    for (let i = 0; i < item.text.length; i++) {
+                        links.push(item.intrinsic.fontProperties.link || null);
+                    }
+                } else if (item instanceof NewlineLink) {
+                    links.push(null);
+                }
+            }
+
+            const cursorPos = this.chain.getCursorCharPosition();
+            // Prefer the link of the character before the cursor, then the one
+            // after it (matches how formatting-at-cursor is usually resolved).
+            let idx = cursorPos - 1;
+            let href = (idx >= 0 && idx < links.length) ? links[idx] : null;
+            if (!href) {
+                idx = cursorPos;
+                href = (idx >= 0 && idx < links.length) ? links[idx] : null;
+            }
+            if (!href) return null;
+
+            let start = idx;
+            let end = idx + 1;
+            while (start > 0 && links[start - 1] === href) start--;
+            while (end < links.length && links[end] === href) end++;
+            return { href, start, end, text: this.getTextInRange(start, end) };
+        }
+
+        // The href at the cursor, or null when the cursor is not within a link.
+        getLinkAtCursor() {
+            const range = this.getLinkRangeAtCursor();
+            return range ? range.href : null;
+        }
+
+        // Insert text carrying the given FontProperties at the cursor.
+        insertTextWithProperties(text, props) {
+            const saved = this.chain.currentFontProperties;
+            this.chain.currentFontProperties = props;
+            for (const ch of text) {
+                if (ch === '\n') {
+                    this.chain.enterPressed();
+                } else {
+                    this.chain.printableKeyPressed(ch);
+                }
+            }
+            this.chain.currentFontProperties = saved;
+        }
+
+        // Set (or clear, when url is falsy) the link on the current selection,
+        // preserving the existing text and per-character formatting.
+        setLink(url) {
+            if (!this.chain.hasSelection()) return;
+            this.takeSnapshot();
+            this.applyFormattingToSelection('link', () => url || null);
+            this.render();
+        }
+
+        // Remove the link from the link run at the cursor, keeping its text.
+        removeLink() {
+            const range = this.getLinkRangeAtCursor();
+            if (!range) return;
+            this.takeSnapshot();
+            this.chain.selectionStart = range.start;
+            this.chain.selectionEnd = range.end;
+            this.applyFormattingToSelection('link', () => null);
+            this.chain.clearSelection();
+            this.render();
+        }
+
+        // Create or update a link with explicit display text and URL. Replaces the
+        // existing link run at the cursor (if any), otherwise the current
+        // selection, otherwise inserts at the cursor. An empty url clears the link
+        // while keeping the text.
+        applyLink(text, url) {
+            this.takeSnapshot();
+            const href = url ? url : null;
+
+            const existing = this.getLinkRangeAtCursor();
+            let start;
+            let end;
+            if (existing) {
+                start = existing.start;
+                end = existing.end;
+            } else if (this.chain.hasSelection()) {
+                start = this.chain.selectionStart;
+                end = this.chain.selectionEnd;
+            } else {
+                start = end = this.chain.getCursorCharPosition();
+            }
+
+            const props = this.getFontPropertiesAtCursor();
+            props.link = href;
+
+            this.remapAroundEdit(() => {
+                if (end > start) {
+                    this.chain.deleteCharRange(start, end);
+                }
+                if (text && text.length > 0) {
+                    this.insertTextWithProperties(text, props);
+                }
+            });
+            this.chain.clearSelection();
+            this.render();
+        }
+
+        // Open a link URL in a new tab (browser only).
+        openLink(href) {
+            if (href && typeof window !== 'undefined' && typeof window.open === 'function') {
+                window.open(href, '_blank', 'noopener');
+            }
+        }
+
+        // Lazily build the link-editing overlay (a real DOM element). Returns null
+        // in non-browser environments so the data API stays usable in Node.
+        ensureLinkPopup() {
+            if (typeof document === 'undefined') return null;
+            if (this.linkPopup) return this.linkPopup;
+
+            const el = document.createElement('div');
+            el.className = 'canvas-richtext-link-popup';
+            Object.assign(el.style, {
+                position: 'absolute',
+                display: 'none',
+                zIndex: '10000',
+                background: '#ffffff',
+                border: '1px solid #ccc',
+                borderRadius: '6px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+                padding: '8px',
+                font: '13px sans-serif',
+                width: '240px',
+                boxSizing: 'border-box'
+            });
+            const inputStyle = 'width:100%;box-sizing:border-box;padding:4px;margin-top:2px;border:1px solid #ccc;border-radius:4px;';
+            el.innerHTML =
+                '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                '<label style="display:flex;flex-direction:column;font-size:11px;color:#555;">Text' +
+                '<input type="text" class="crt-link-text" style="' + inputStyle + '"></label>' +
+                '<label style="display:flex;flex-direction:column;font-size:11px;color:#555;">URL' +
+                '<input type="text" class="crt-link-url" placeholder="https://" style="' + inputStyle + '"></label>' +
+                '<div style="display:flex;gap:6px;justify-content:flex-end;">' +
+                '<button type="button" class="crt-link-open">Open</button>' +
+                '<button type="button" class="crt-link-remove">Remove</button>' +
+                '<button type="button" class="crt-link-cancel">Cancel</button>' +
+                '<button type="button" class="crt-link-apply">Apply</button>' +
+                '</div></div>';
+
+            const textInput = el.querySelector('.crt-link-text');
+            const urlInput = el.querySelector('.crt-link-url');
+
+            el.querySelector('.crt-link-apply').addEventListener('click', () => {
+                const url = urlInput.value.trim();
+                const text = textInput.value.length > 0 ? textInput.value : url;
+                this.applyLink(text, url);
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-cancel').addEventListener('click', () => {
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-remove').addEventListener('click', () => {
+                this.removeLink();
+                this.closeLinkPopup();
+                this.canvas.focus();
+            });
+            el.querySelector('.crt-link-open').addEventListener('click', () => {
+                this.openLink(urlInput.value.trim());
+            });
+            // Keep clicks inside the popup from reaching the canvas (which would
+            // reposition the cursor or dismiss the popup).
+            el.addEventListener('mousedown', (e) => e.stopPropagation());
+
+            document.body.appendChild(el);
+            this.linkPopup = el;
+            this.linkPopupText = textInput;
+            this.linkPopupUrl = urlInput;
+            return el;
+        }
+
+        // Open the link editor, seeded from the link at the cursor, the current
+        // selection, or empty. Positioned over the canvas near the cursor.
+        openLinkPopup() {
+            const el = this.ensureLinkPopup();
+            if (!el) return;
+
+            const existing = this.getLinkRangeAtCursor();
+            let text = '';
+            let url = '';
+            if (existing) {
+                text = existing.text;
+                url = existing.href;
+            } else if (this.chain.hasSelection()) {
+                text = this.getTextInRange(this.chain.selectionStart, this.chain.selectionEnd);
+            }
+
+            this.linkPopupText.value = text;
+            this.linkPopupUrl.value = url;
+            el.style.display = 'block';
+            this.positionLinkPopup();
+            this.linkPopupUrl.focus();
+        }
+
+        closeLinkPopup() {
+            if (this.linkPopup) this.linkPopup.style.display = 'none';
+        }
+
+        // Place the popup near the cursor, flipping/clamping to stay within the
+        // canvas bounds (below the line by default, above if it would overflow).
+        positionLinkPopup() {
+            const el = this.linkPopup;
+            if (!el || typeof window === 'undefined' || !this.canvas.getBoundingClientRect) return;
+
+            const rect = this.canvas.getBoundingClientRect();
+            const cursor = this.chain.getCursor();
+            const cx = (cursor.computed && cursor.computed.posX) || 0;
+            const cy = (cursor.computed && cursor.computed.posY) || 0;
+
+            const originX = rect.left + (window.scrollX || 0);
+            const originY = rect.top + (window.scrollY || 0);
+
+            const pw = el.offsetWidth || 240;
+            const ph = el.offsetHeight || 110;
+
+            let left = originX + this.options.padding + cx;
+            let top = originY + this.options.padding + cy - this.scrollY + 6;
+
+            // Clamp horizontally within the canvas.
+            const minLeft = originX;
+            const maxLeft = originX + this.canvas.width - pw;
+            if (left > maxLeft) left = maxLeft;
+            if (left < minLeft) left = minLeft;
+
+            // Flip above the line if the popup would overflow the canvas bottom.
+            const canvasBottom = originY + this.canvas.height;
+            if (top + ph > canvasBottom) {
+                top = top - ph - 12 - 6;
+            }
+            if (top < originY) top = originY;
+
+            el.style.left = `${left}px`;
+            el.style.top = `${top}px`;
+        }
+
         toggleCenterAlign() {
             const paragraphIndex = this.getCurrentParagraphIndex();
             const currentAlign = this.paragraphAlignments.get(paragraphIndex) || 'left';
@@ -2335,22 +3673,26 @@
 
                 if (isLineEnd) {
                     const alignment = this.paragraphAlignments.get(currentParagraph) || 'left';
+                    const indent = this.paragraphLists.has(currentParagraph) ? this.LIST_INDENT : 0;
 
-                    if (alignment === 'center') {
-                        // Calculate line width
-                        let lineWidth = 0;
-                        for (let j = lineStartIdx; j < i; j++) {
-                            if (items[j] instanceof TextLink) {
-                                const text = items[j].text;
-                                const metrics = items[j].measureText(this.ctx, text);
-                                lineWidth += metrics.width;
-                            }
+                    // Recompute this visual line's base X layout from the paragraph
+                    // indent. Doing this every time keeps alignment idempotent
+                    // across renders (offsets must not accumulate frame to frame).
+                    let lineWidth = indent;
+                    for (let j = lineStartIdx; j < i; j++) {
+                        if (items[j].computed) {
+                            items[j].computed.posX = lineWidth;
                         }
+                        if (items[j] instanceof TextLink) {
+                            lineWidth += items[j].measureText(this.ctx).width;
+                        }
+                    }
 
-                        // Calculate offset to center the line
-                        const offset = Math.max(0, (this.editorWidth - lineWidth) / 2);
+                    if (alignment === 'center' || alignment === 'right') {
+                        // Center splits the free space; right pushes it all left.
+                        const freeSpace = Math.max(0, this.editorWidth - lineWidth);
+                        const offset = alignment === 'center' ? freeSpace / 2 : freeSpace;
 
-                        // Apply offset to all items on this line
                         for (let j = lineStartIdx; j < i; j++) {
                             if (items[j].computed && items[j].computed.posX !== undefined) {
                                 items[j].computed.posX += offset;
@@ -2371,26 +3713,54 @@
 
         applyFormattingToSelection(property, valueFn) {
             const items = this.chain.getItems();
-            let pos = 0;
             const selStart = this.chain.selectionStart;
             const selEnd = this.chain.selectionEnd;
+            const newItems = [];
+            let pos = 0;
 
             for (let item of items) {
                 if (item instanceof TextLink) {
                     const itemStart = pos;
                     const itemEnd = pos + item.text.length;
+                    pos = itemEnd;
 
-                    // If this item overlaps with the selection, update its property
-                    if (itemEnd > selStart && itemStart < selEnd) {
-                        const currentValue = item.intrinsic.fontProperties[property];
-                        item.intrinsic.fontProperties[property] = valueFn(currentValue);
+                    // No overlap with the selection: keep the run untouched.
+                    if (itemEnd <= selStart || itemStart >= selEnd) {
+                        newItems.push(item);
+                        continue;
                     }
-                    pos += item.text.length;
-                } else if (item instanceof NewlineLink) {
-                    pos += 1;
+
+                    // The run partially (or fully) overlaps the selection. Split it
+                    // at the selection boundaries so formatting applies only to the
+                    // selected characters. recalc() re-coalesces any runs that end
+                    // up adjacent with matching properties.
+                    const fontProps = item.intrinsic.fontProperties;
+                    const s = Math.max(0, selStart - itemStart);
+                    const e = Math.min(item.text.length, selEnd - itemStart);
+
+                    // Unselected head, if any.
+                    if (s > 0) {
+                        newItems.push(new TextLink(item.text.substring(0, s), fontProps.clone()));
+                    }
+
+                    // Selected middle: apply the formatting change.
+                    const selectedProps = fontProps.clone();
+                    selectedProps[property] = valueFn(selectedProps[property]);
+                    newItems.push(new TextLink(item.text.substring(s, e), selectedProps));
+
+                    // Unselected tail, if any.
+                    if (e < item.text.length) {
+                        newItems.push(new TextLink(item.text.substring(e), fontProps.clone()));
+                    }
+                } else {
+                    if (item instanceof NewlineLink) {
+                        pos += 1;
+                    }
+                    newItems.push(item);
                 }
             }
 
+            this.chain.items = newItems;
             this.chain.recalc();
         }
 
@@ -2410,6 +3780,10 @@
         setText(text) {
             // Clear the chain and insert text
             this.chain.items = [new CursorLink()];
+            // A fresh plain-text document has no paragraph-level attributes.
+            this.paragraphAlignments = new Map();
+            this.paragraphLists = new Map();
+            this.syncParagraphIndents();
             for (let char of text) {
                 if (char === '\n') {
                     this.chain.enterPressed();
@@ -2417,6 +3791,104 @@
                     this.chain.printableKeyPressed(char);
                 }
             }
+            this.render();
+        }
+
+        // Serialize the full document (text, per-run formatting, and paragraph
+        // alignment) to a plain object suitable for JSON.stringify. Cursor and
+        // wrap (virtual newline) state are layout artifacts and are not included;
+        // they are recomputed on load.
+        toJSON() {
+            const items = this.chain.getItems();
+            const content = [];
+            for (let item of items) {
+                if (item instanceof TextLink) {
+                    content.push({
+                        type: 'text',
+                        text: item.text,
+                        font: item.intrinsic.fontProperties.toObject()
+                    });
+                } else if (item instanceof HorizontalRuleLink) {
+                    // Must precede NewlineLink: HorizontalRuleLink extends it.
+                    content.push({ type: 'hr' });
+                } else if (item instanceof NewlineLink) {
+                    content.push({ type: 'newline' });
+                }
+            }
+
+            const alignments = {};
+            for (let [paragraphIndex, alignment] of this.paragraphAlignments) {
+                alignments[paragraphIndex] = alignment;
+            }
+
+            const lists = {};
+            for (let [paragraphIndex, type] of this.paragraphLists) {
+                lists[paragraphIndex] = type;
+            }
+
+            return {
+                version: 1,
+                content,
+                alignments,
+                lists
+            };
+        }
+
+        // Rebuild the chain and paragraph attributes from a parsed document object,
+        // placing the cursor at the end. Does not touch undo history, selection, or
+        // trigger a render; callers handle those. Shared by fromJSON() and undo
+        // snapshot restore.
+        loadDocumentData(data) {
+            const items = [];
+            for (let entry of data.content) {
+                if (entry.type === 'text') {
+                    items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+                } else if (entry.type === 'hr') {
+                    items.push(new HorizontalRuleLink());
+                } else if (entry.type === 'newline') {
+                    items.push(new NewlineLink());
+                }
+            }
+            items.push(new CursorLink());
+            this.chain.items = items;
+
+            // Restore paragraph alignments (keys are stringified in JSON objects).
+            this.paragraphAlignments = new Map();
+            if (data.alignments) {
+                for (let key of Object.keys(data.alignments)) {
+                    this.paragraphAlignments.set(Number(key), data.alignments[key]);
+                }
+            }
+
+            // Restore paragraph list types and the matching wrap indents.
+            this.paragraphLists = new Map();
+            if (data.lists) {
+                for (let key of Object.keys(data.lists)) {
+                    this.paragraphLists.set(Number(key), data.lists[key]);
+                }
+            }
+            this.syncParagraphIndents();
+        }
+
+        // Rebuild the document from an object produced by toJSON() (or its JSON
+        // string form). Replaces the current document contents and resets undo
+        // history so the loaded document is the new baseline.
+        fromJSON(data) {
+            if (typeof data === 'string') {
+                data = JSON.parse(data);
+            }
+            if (!data || !Array.isArray(data.content)) {
+                throw new Error('fromJSON: invalid document data');
+            }
+
+            this.loadDocumentData(data);
+
+            // The loaded document becomes the new baseline.
+            this.history = [];
+            this.historyIndex = -1;
+
+            this.chain.clearSelection();
+            this.chain.recalc();
             this.render();
         }
 
@@ -2604,27 +4076,11 @@
                 this.history = this.history.slice(0, this.historyIndex + 1);
             }
 
-            // Create a deep copy of the chain state
+            // Capture the full document (rich runs, paragraph attributes, rules,
+            // links) plus cursor and selection so undo/redo are lossless.
             const snapshot = {
-                items: this.chain.items.map(item => {
-                    if (item instanceof TextLink) {
-                        return {
-                            type: 'TextLink',
-                            text: item.text,
-                            fontProperties: {
-                                size: item.intrinsic.fontProperties.size,
-                                family: item.intrinsic.fontProperties.family,
-                                weight: item.intrinsic.fontProperties.weight,
-                                style: item.intrinsic.fontProperties.style
-                            }
-                        };
-                    } else if (item instanceof CursorLink) {
-                        return { type: 'CursorLink' };
-                    } else if (item instanceof NewlineLink) {
-                        return { type: 'NewlineLink' };
-                    }
-                    return null;
-                }).filter(item => item !== null),
+                doc: this.toJSON(),
+                cursorPos: this.chain.getCursorCharPosition(),
                 selectionStart: this.chain.selectionStart,
                 selectionEnd: this.chain.selectionEnd
             };
@@ -2642,25 +4098,10 @@
         restoreSnapshot(snapshot) {
             if (!snapshot) return;
 
-            // Restore chain items
-            this.chain.items = snapshot.items.map(item => {
-                if (item.type === 'TextLink') {
-                    const fontProps = new FontProperties(
-                        item.fontProperties.size,
-                        item.fontProperties.family,
-                        item.fontProperties.weight,
-                        item.fontProperties.style
-                    );
-                    return new TextLink(item.text, fontProps);
-                } else if (item.type === 'CursorLink') {
-                    return new CursorLink();
-                } else if (item.type === 'NewlineLink') {
-                    return new NewlineLink();
-                }
-                return null;
-            }).filter(item => item !== null);
-
-            // Restore selection
+            // Rebuild the document, then restore cursor and selection. Does not
+            // touch the history stack (unlike fromJSON).
+            this.loadDocumentData(snapshot.doc);
+            this.chain.moveCursorToCharPosition(snapshot.cursorPos);
             this.chain.selectionStart = snapshot.selectionStart;
             this.chain.selectionEnd = snapshot.selectionEnd;
 
@@ -2695,6 +4136,7 @@
             this.canvas.height = height;
             this.editorWidth = width - (this.options.padding * 2);
             this.chain.setWidth(this.editorWidth);
+            this.clampScroll();
             this.render();
         }
 
@@ -2711,6 +4153,16 @@
             this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
             this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
             this.canvas.removeEventListener('mouseover', this.boundHandleMouseOver);
+            this.canvas.removeEventListener('wheel', this.boundHandleWheel);
+            this.canvas.removeEventListener('touchstart', this.boundHandleTouchStart);
+            this.canvas.removeEventListener('touchmove', this.boundHandleTouchMove);
+            this.canvas.removeEventListener('touchend', this.boundHandleTouchEnd);
+
+            // Remove the link-editor overlay if one was created.
+            if (this.linkPopup && this.linkPopup.parentNode) {
+                this.linkPopup.parentNode.removeChild(this.linkPopup);
+                this.linkPopup = null;
+            }
         }
 
         // Debug method to dump full editor state

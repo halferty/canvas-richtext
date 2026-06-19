@@ -4,21 +4,28 @@ A canvas-based rich-text editor for the web, inspired by Google Docs' rendering 
 
 **[🚀 Live Demo](https://halferty.github.io/canvas-richtext/)** | **[📦 npm package](https://www.npmjs.com/package/canvas-richtext)**
 
-![Tests](https://img.shields.io/badge/tests-236%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Tests](https://img.shields.io/badge/tests-458%20passing-brightgreen) ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
 - 🎨 **Canvas-based rendering** - Smooth, high-performance text rendering
 - ⌨️ **Full keyboard support** - Natural text editing with cursor movement, backspace, enter
 - 🖱️ **Mouse interaction** - Click to position cursor anywhere in the text
-- 📝 **Rich text support** - Multiple font sizes, families, weights, and styles
+- 📱 **Touch support** - Tap to position the cursor and drag to scroll on touch devices
+- 📝 **Rich text support** - Multiple font sizes, families, weights, styles, text color, and highlight color
+- 📋 **Lists** - Bulleted and numbered lists with hanging indents, automatic numbering, and Enter-to-continue
+- 🔗 **Hyperlinks** - Linked text with an inline edit popup; Ctrl/Cmd-click to open
+- ➖ **Horizontal rules** - Insert dividers that render on their own row
+- ↩️ **Lossless undo/redo** - Full-fidelity history covering formatting, lists, rules, links, alignment, and cursor position
+- 💾 **Save & load** - Serialize the full formatted document to/from JSON for persistence and autosave
 - 🔄 **Automatic text wrapping** - Smart word-based line breaking
+- 📜 **Scrolling** - Mouse-wheel, draggable scrollbar, and PageUp/PageDown with cursor auto-scroll for long documents
 - 🎯 **Cursor management** - Blinking cursor with customizable appearance
 - 🧩 **Modular architecture** - Clean separation of concerns with Chain/Link pattern
 
 ## Testing
 
-This library features **100% synthetic testing** - all 236 tests run in Node.js without requiring a browser!
+This library features **100% synthetic testing** - all 458 tests run in Node.js without requiring a browser!
 
 ```bash
 npm test
@@ -134,6 +141,15 @@ const editor = new CanvasEditor(canvas, {
     defaultFontWeight: 'normal',
     defaultFontStyle: 'normal',
     
+    // Scrollbar appearance (shown only when content overflows)
+    scrollbarWidth: 10,
+    scrollbarTrackColor: 'rgba(0, 0, 0, 0.05)',
+    scrollbarThumbColor: 'rgba(0, 0, 0, 0.3)',
+    minScrollbarThumbHeight: 24,
+    
+    // Number of spaces inserted by the Tab key
+    tabSize: 4,
+    
     // Enable debug logging
     debug: false
 });
@@ -158,8 +174,33 @@ new CanvasEditor(canvas: HTMLCanvasElement, options?: CanvasEditorOptions)
 - **`clear(): void`** - Clears all content
 - **`setFontSize(size: number): void`** - Changes the font size for new text
 - **`setFontFamily(family: string): void`** - Changes the font family for new text
+- **`setTextColor(color: string): void`** - Sets the text color (applies to the selection, or to new text)
+- **`setHighlightColor(color: string | null): void`** - Sets the highlight/background color (pass `null` to clear)
+- **`toggleBulletList(): void`** - Toggles a bulleted list across the selected paragraph(s)
+- **`toggleNumberedList(): void`** - Toggles a numbered list across the selected paragraph(s)
+- **`insertHorizontalRule(): void`** - Inserts a horizontal rule (divider) on its own line at the cursor
+- **`setLink(url: string | null): void`** - Sets/clears the link on the current selection, preserving its text
+- **`applyLink(text: string, url: string): void`** - Creates or updates a link with explicit display text and URL
+- **`removeLink(): void`** - Removes the link at the cursor, keeping its text
+- **`getLinkAtCursor(): string | null`** - Returns the URL of the link at the cursor, or `null`
+- **`openLinkPopup(): void`** - Opens the inline link editor (browser only)
+- **`toJSON(): object`** - Serializes the full document — text, per-run formatting, and paragraph alignment — to a plain, JSON-stringifiable object
+- **`fromJSON(data: object | string): void`** - Restores a document previously produced by `toJSON()` (accepts the object or its JSON string)
 - **`resize(width: number, height: number): void`** - Resizes the canvas
 - **`destroy(): void`** - Cleans up event listeners and resources
+
+#### Saving and loading documents
+
+`toJSON()` / `fromJSON()` preserve rich formatting that plain `getText()`/`setText()` cannot — making them ideal for autosave and persistence:
+
+```javascript
+// Save (e.g. to localStorage or your backend)
+const doc = editor.toJSON();
+localStorage.setItem('myDoc', JSON.stringify(doc));
+
+// Load later — restores text, fonts, colors, highlights, and alignment
+editor.fromJSON(localStorage.getItem('myDoc'));
+```
 
 ### Advanced Usage
 
@@ -235,16 +276,21 @@ BSD License - feel free to use this in your projects!
 
 ## Roadmap
 
-Future enhancements planned:
+Implemented:
 
-- [ ] Text selection and copy/paste
-- [ ] Undo/redo functionality
-- [ ] Bold, italic, underline formatting
-- [ ] Multiple font colors
-- [ ] Text alignment (left, center, right, justify)
-- [ ] Line height customization
-- [ ] Vertical scrolling for long documents
-- [ ] Touch device support
+- [x] Text selection and copy/paste
+- [x] Undo/redo functionality
+- [x] Bold, italic, underline formatting (plus strikethrough, super/subscript)
+- [x] Multiple font colors
+- [x] Text alignment (left, center, right)
+- [x] Line height customization
+- [x] Keyboard navigation (Home/End, word-wise Ctrl+Arrows, PageUp/PageDown)
+- [x] Vertical scrolling for long documents
+- [x] Touch device support
+
+Still planned:
+
+- [ ] Justified text alignment
 - [ ] Canvas-based toolbar buttons
 
 ## Acknowledgments
