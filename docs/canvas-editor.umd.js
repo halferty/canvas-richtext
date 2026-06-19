@@ -121,6 +121,27 @@
     class HorizontalRuleLink extends NewlineLink {}
 
     /**
+     * ImageLink - A block image rendered (as a thumbnail) on its own row. Like
+     * HorizontalRuleLink it extends NewlineLink, so it counts as one character and
+     * participates in navigation/deletion for free. The model stores the display
+     * dimensions so layout is deterministic without decoding the image, plus an
+     * optional `full` URL opened on click and `alt` text.
+     */
+    class ImageLink extends NewlineLink {
+        constructor({ src, full = null, width = 0, height = 0, alt = '' } = {}) {
+            super();
+            this.intrinsic = {
+                ...this.intrinsic,
+                src,
+                full,
+                width,
+                height,
+                alt
+            };
+        }
+    }
+
+    /**
      * Chain - Manages the linked list of text, cursor, and newline elements
      */
     class Chain {
@@ -142,6 +163,20 @@
             // Populated by the editor for list paragraphs so wrapping and the
             // hanging indent are computed against the reduced content width.
             this.paragraphIndents = new Map();
+            // Vertical margin above/below a block image, in pixels.
+            this.IMAGE_VMARGIN = 8;
+        }
+
+        // Display size of a block image, scaled down to fit the content width
+        // while preserving aspect ratio.
+        imageDrawSize(image) {
+            const iw = image.intrinsic.width || 1;
+            const ih = image.intrinsic.height || 1;
+            if (iw <= this.widthPixels) {
+                return { drawWidth: iw, drawHeight: ih };
+            }
+            const scale = this.widthPixels / iw;
+            return { drawWidth: this.widthPixels, drawHeight: ih * scale };
         }
 
         // Left indent (px) for a given paragraph index; 0 when not indented.
@@ -407,11 +442,18 @@
                 
                 // Apply consistent line spacing to all lines
                 let lineHeight = baseHeight * this.LINE_SPACING_MULT;
-                
+
+                // A block image owns its line; size that line to the image.
+                const isImageLine = i < this.items.length && this.items[i] instanceof ImageLink;
+                if (isImageLine) {
+                    const { drawHeight } = this.imageDrawSize(this.items[i]);
+                    lineHeight = drawHeight + this.IMAGE_VMARGIN * 2;
+                }
+
                 for (let j = currentLineStartIdx; j < i; j++) {
                     this.items[j].computed.lineHeight = lineHeight;
                 }
-                
+
                 if ((this.items[i] instanceof VirtualNewlineLink) || (this.items[i] instanceof NewlineLink) || (i === this.items.length)) {
                     posY += lineHeight;
                     currentLineStartIdx = i + 1;
@@ -423,6 +465,16 @@
                             ...this.items[i].computed,
                             posY
                         };
+                        if (isImageLine) {
+                            // Centered box; posY is the bottom of the line.
+                            const { drawWidth, drawHeight } = this.imageDrawSize(this.items[i]);
+                            this.items[i].computed.box = {
+                                x: Math.max(0, (this.widthPixels - drawWidth) / 2),
+                                y: posY - drawHeight - this.IMAGE_VMARGIN,
+                                w: drawWidth,
+                                h: drawHeight
+                            };
+                        }
                     }
                 } else if (this.items[i] instanceof TextLink) {
                     const measured = this.items[i].measureText(this.ctx);
@@ -1027,25 +1079,29 @@
             this.recalc();
         }
 
-        // Insert a horizontal rule on its own line, with the cursor left below it.
-        insertHorizontalRule() {
+        // Insert a block-level link (rule, image, …) on its own line, leaving the
+        // cursor just below it. Breaks the current line first when the cursor is
+        // mid-line so the block gets its own row.
+        insertBlock(link) {
             const idx = this.cursorIdx();
 
-            // Determine whether the cursor already sits at the start of a line.
-            // If not, break the current line first so the rule gets its own row.
             let atLineStart = true;
             for (let j = idx - 1; j >= 0; j--) {
                 if (this.items[j] instanceof CursorLink) continue;
-                // HorizontalRuleLink/NewlineLink both count as a preceding break.
+                // Any NewlineLink subclass (rule/image included) counts as a break.
                 atLineStart = this.items[j] instanceof NewlineLink;
                 break;
             }
 
             const toInsert = [];
             if (!atLineStart) toInsert.push(new NewlineLink());
-            toInsert.push(new HorizontalRuleLink());
+            toInsert.push(link);
             this.items.splice(idx, 0, ...toInsert);
             this.recalc();
+        }
+
+        insertHorizontalRule() {
+            this.insertBlock(new HorizontalRuleLink());
         }
 
         clicked(x, y) {
@@ -2151,6 +2207,14 @@
             const x = e.clientX - rect.left - this.options.padding;
             const y = e.clientY - rect.top - this.options.padding + this.scrollY;
 
+            // Clicking a block image opens its full-size view (if one was provided).
+            const clickedImage = this.imageAt(x, y);
+            if (clickedImage && clickedImage.intrinsic.full) {
+                this.openImageLightbox(clickedImage.intrinsic.full, clickedImage.intrinsic.alt);
+                this.canvas.focus();
+                return;
+            }
+
             // Track click count for double/triple click
             const now = Date.now();
             if (now - this.lastClickTime < 500) {
@@ -2795,6 +2859,8 @@
                 
                 if (item instanceof TextLink) {
                     this.renderTextLink(item);
+                } else if (item instanceof ImageLink) {
+                    this.renderImage(item);
                 } else if (item instanceof HorizontalRuleLink) {
                     this.renderHorizontalRule(item);
                 } else if (item instanceof CursorLink) {
@@ -2809,6 +2875,33 @@
 
             // Scrollbar is drawn in screen space, on top of the content.
             this.renderScrollbar();
+        }
+
+        renderImage(image) {
+            const box = image.computed && image.computed.box;
+            if (!box) return;
+
+            const entry = this.getImageEntry(image.intrinsic.src);
+            if (entry.loaded && entry.img) {
+                this.ctx.drawImage(entry.img, box.x, box.y, box.w, box.h);
+                return;
+            }
+
+            // Placeholder while loading (or when decoding isn't available).
+            this.ctx.fillStyle = entry.error ? '#fde8e8' : '#f0f0f0';
+            this.ctx.fillRect(box.x, box.y, box.w, box.h);
+            this.ctx.strokeStyle = '#cccccc';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+
+            this.ctx.fillStyle = '#888888';
+            this.ctx.font = '12px sans-serif';
+            this.ctx.textBaseline = 'top';
+            const label = entry.error
+                ? (image.intrinsic.alt || 'Image failed to load')
+                : (image.intrinsic.alt || 'Loading image…');
+            this.ctx.fillText(label, box.x + 8, box.y + 8);
+            this.ctx.textBaseline = 'alphabetic';
         }
 
         renderHorizontalRule(rule) {
@@ -3489,6 +3582,108 @@
             this.render();
         }
 
+        // --- Images -----------------------------------------------------------
+
+        // Insert a block image on its own line. The caller (its uploader/resizer)
+        // supplies the thumbnail `src`, an optional full-size `full` URL opened on
+        // click, the display `width`/`height`, and `alt` text.
+        insertImage({ src, full = null, width = 0, height = 0, alt = '' }) {
+            this.takeSnapshot();
+            const link = new ImageLink({ src, full, width, height, alt });
+            this.remapAroundEdit(() => this.chain.insertBlock(link));
+            this.scrollToCursorOnNextRender = true;
+            this.render();
+        }
+
+        // Per-source image cache. Decoding is browser-only; in non-DOM
+        // environments the entry stays unloaded and a placeholder is drawn, so
+        // layout (which uses the model's stored dimensions) stays deterministic.
+        getImageEntry(src) {
+            if (!this._imageCache) this._imageCache = new Map();
+            let entry = this._imageCache.get(src);
+            if (entry) return entry;
+
+            entry = { loaded: false, error: false, img: null };
+            this._imageCache.set(src, entry);
+
+            if (typeof Image !== 'undefined' && src) {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    entry.loaded = true;
+                    entry.img = img;
+                    this.render();
+                };
+                img.onerror = () => {
+                    entry.error = true;
+                    this.render();
+                };
+                img.src = src;
+            }
+            return entry;
+        }
+
+        // The block image whose drawn box contains the given content-space point.
+        imageAt(x, y) {
+            for (const item of this.chain.getItems()) {
+                if (item instanceof ImageLink && item.computed && item.computed.box) {
+                    const b = item.computed.box;
+                    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                        return item;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Open the full-size image in a simple lightbox overlay (browser only).
+        openImageLightbox(full, alt = '') {
+            if (typeof document === 'undefined' || !full) return;
+
+            if (!this.imageLightbox) {
+                const overlay = document.createElement('div');
+                overlay.className = 'canvas-richtext-image-lightbox';
+                Object.assign(overlay.style, {
+                    position: 'fixed',
+                    inset: '0',
+                    display: 'none',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.8)',
+                    zIndex: '10001',
+                    cursor: 'zoom-out'
+                });
+                const img = document.createElement('img');
+                Object.assign(img.style, {
+                    maxWidth: '90vw',
+                    maxHeight: '90vh',
+                    boxShadow: '0 4px 30px rgba(0,0,0,0.5)'
+                });
+                overlay.appendChild(img);
+                overlay.addEventListener('click', () => this.closeImageLightbox());
+                document.body.appendChild(overlay);
+                this.imageLightbox = overlay;
+                this.imageLightboxImg = img;
+                this._lightboxKeyHandler = (e) => {
+                    if (e.key === 'Escape') this.closeImageLightbox();
+                };
+            }
+
+            this.imageLightboxImg.src = full;
+            this.imageLightboxImg.alt = alt;
+            this.imageLightbox.style.display = 'flex';
+            document.addEventListener('keydown', this._lightboxKeyHandler);
+        }
+
+        closeImageLightbox() {
+            if (this.imageLightbox) {
+                this.imageLightbox.style.display = 'none';
+                if (this._lightboxKeyHandler) {
+                    document.removeEventListener('keydown', this._lightboxKeyHandler);
+                }
+            }
+        }
+
         // --- Hyperlinks -------------------------------------------------------
 
         // The actual FontProperties active at the cursor (cloneable), as opposed
@@ -3930,6 +4125,16 @@
                         text: item.text,
                         font: item.intrinsic.fontProperties.toObject()
                     });
+                } else if (item instanceof ImageLink) {
+                    // Must precede NewlineLink: ImageLink extends it.
+                    content.push({
+                        type: 'image',
+                        src: item.intrinsic.src,
+                        full: item.intrinsic.full,
+                        width: item.intrinsic.width,
+                        height: item.intrinsic.height,
+                        alt: item.intrinsic.alt
+                    });
                 } else if (item instanceof HorizontalRuleLink) {
                     // Must precede NewlineLink: HorizontalRuleLink extends it.
                     content.push({ type: 'hr' });
@@ -3965,6 +4170,14 @@
             for (let entry of data.content) {
                 if (entry.type === 'text') {
                     items.push(new TextLink(entry.text, FontProperties.fromObject(entry.font)));
+                } else if (entry.type === 'image') {
+                    items.push(new ImageLink({
+                        src: entry.src,
+                        full: entry.full,
+                        width: entry.width,
+                        height: entry.height,
+                        alt: entry.alt
+                    }));
                 } else if (entry.type === 'hr') {
                     items.push(new HorizontalRuleLink());
                 } else if (entry.type === 'newline') {
@@ -4284,6 +4497,17 @@
             if (this.linkPopup && this.linkPopup.parentNode) {
                 this.linkPopup.parentNode.removeChild(this.linkPopup);
                 this.linkPopup = null;
+            }
+
+            // Remove the image lightbox overlay if one was created.
+            if (this.imageLightbox) {
+                if (this._lightboxKeyHandler && typeof document !== 'undefined') {
+                    document.removeEventListener('keydown', this._lightboxKeyHandler);
+                }
+                if (this.imageLightbox.parentNode) {
+                    this.imageLightbox.parentNode.removeChild(this.imageLightbox);
+                }
+                this.imageLightbox = null;
             }
         }
 

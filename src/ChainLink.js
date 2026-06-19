@@ -113,3 +113,24 @@ export class NewlineLink extends ChainLink {}
  * rendering and serialization differ.
  */
 export class HorizontalRuleLink extends NewlineLink {}
+
+/**
+ * ImageLink - A block image rendered (as a thumbnail) on its own row. Like
+ * HorizontalRuleLink it extends NewlineLink, so it counts as one character and
+ * participates in navigation/deletion for free. The model stores the display
+ * dimensions so layout is deterministic without decoding the image, plus an
+ * optional `full` URL opened on click and `alt` text.
+ */
+export class ImageLink extends NewlineLink {
+    constructor({ src, full = null, width = 0, height = 0, alt = '' } = {}) {
+        super();
+        this.intrinsic = {
+            ...this.intrinsic,
+            src,
+            full,
+            width,
+            height,
+            alt
+        };
+    }
+}

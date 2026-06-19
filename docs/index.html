@@ -544,6 +544,7 @@
                     <button id="numbered-list-btn" class="format-btn" title="Numbered list">1. List</button>
                     <button id="horizontal-rule-btn" class="format-btn" title="Insert horizontal rule">― Rule</button>
                     <button id="link-btn" class="format-btn" title="Insert/edit link">🔗 Link</button>
+                    <button id="image-btn" class="format-btn" title="Insert image (demo uploader)">🖼 Image</button>
                 </div>
 
                 <div class="toolbar-group">
@@ -1066,6 +1067,21 @@ Type away and explore the features...`;
 
         document.getElementById('link-btn').addEventListener('click', () => {
             editor.openLinkPopup();
+        });
+
+        // Image insertion. The editor is "bring your own uploader" — it only
+        // shows the image. Here we simulate an upload + a resizer (like
+        // Cloudflare Images) that returns a small thumbnail URL for the canvas
+        // and a large full-size URL opened on click. Seeded picsum.photos URLs
+        // give the same picture at both sizes.
+        document.getElementById('image-btn').addEventListener('click', () => {
+            const seed = Math.random().toString(36).slice(2, 8);
+            const w = 360, h = 240;
+            const thumb = `https://picsum.photos/seed/${seed}/${w}/${h}`;
+            const full = `https://picsum.photos/seed/${seed}/1600/1067`;
+            editor.insertImage({ src: thumb, full, width: w, height: h, alt: 'Demo image' });
+            canvas.focus({ preventScroll: true });
+            updateToolbar();
         });
 
         // Text color control
